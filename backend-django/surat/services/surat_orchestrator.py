@@ -3,7 +3,7 @@ import threading
 from typing import Dict, Any, Optional
 from django.db import close_old_connections
 
-from .letter_agent import SuratDraftingAgent, LetterAgent
+from agents.letter_agent import SuratDraftingAgent, LetterAgent
 from .detect_intent import detect_intent_dynamically
 from .route_intent import route_intent_with_ai
 from surat.models import SuratType, SuratRequest, ChatThread
