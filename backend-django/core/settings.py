@@ -24,7 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY') or os.environ.get('DjANGO_SECRET_KEY', 'django-insecure-autosurat-dev-secret-key-9988776655')
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
-ALLOWED_HOSTS = ['auto-surat-backend-1.onrender.com', 'auto-surat-backend.onrender.com','localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['asura-1-f0d5.onrender.com','localhost', '127.0.0.1']
 # Application definition
 
 INSTALLED_APPS = [
