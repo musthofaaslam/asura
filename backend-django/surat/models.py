@@ -27,7 +27,6 @@ class SuratStatus(models.TextChoices):
     FAILED = "FAILED", "Failed (Gagal Eksekusi Pipeline)"
     REVISION_REQUIRED = "REVISION_REQUIRED", "Revision Required (Revisi Draf AI Diminta)"
 
-
 class ApprovalStatus(models.TextChoices):
     WAITING = "WAITING", "Waiting (Menunggu Giliran)"
     PENDING = "PENDING", "Pending (Aktif Menunggu Keputusan)"

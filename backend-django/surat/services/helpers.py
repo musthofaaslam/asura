@@ -1,6 +1,9 @@
 import json
 from datetime import datetime
 
+"""
+    global helper functions for validating student data and eligibility for various academic and administrative processes.
+"""
 def validate_payment_status(student_data):
     """
     Helper untuk memvalidasi status pembayaran UKT mahasiswa.
@@ -21,22 +24,9 @@ def validate_active_status(student_data):
         return True, "Status akademik mahasiswa aktif."
     return False, "Pengajuan ditolak: Mahasiswa tidak sedang aktif (Cuti/Non-Aktif)."
 
-def check_semester_registration(student_nim, student_courses_data, semester_aktif):
-    """
-    Helper untuk memvalidasi apakah mahasiswa sudah mengisi KRS 
-    dan mengambil mata kuliah di semester aktifnya.
-    """
-    enrolled_courses = [
-        sc for sc in student_courses_data 
-        if sc["nim"] == student_nim 
-        and sc["semester_taken"] == semester_aktif 
-        and sc["status_krs"] == "AMBIL"
-    ]
-    
-    if len(enrolled_courses) > 0:
-        return True, f"Valid: Terdaftar pada {len(enrolled_courses)} mata kuliah semester aktif."
-    return False, "Pengajuan ditolak: Mahasiswa belum melakukan pengisian KRS semester aktif."
-
+"""
+    surat rekomendasi magang
+"""
 def verify_ethical_policy(student_data):
     """
     Helper untuk memvalidasi apakah mahasiswa bersih dari masalah kedisiplinan 
@@ -50,6 +40,26 @@ def verify_ethical_policy(student_data):
     
     return True, "Kelayakan transkrip tervalidasi."
 
+def verify_internship_semester_and_credits(student_data, minimum_sks=60):
+    """
+    Helper untuk memvalidasi apakah mahasiswa sudah memenuhi syarat SKS minimum 
+    dan berada di semester yang diperbolehkan untuk mengambil magang.
+    """
+    total_sks_lulus = student_data.get("total_sks_lulus", 0)
+    semester_aktif = student_data.get("semester_aktif", 1)
+
+    # Contoh aturan: Magang biasanya boleh diambil mulai semester 5 dengan minimal 80 SKS lulus
+    if semester_aktif < 5:
+        return False, f"Pengajuan ditolak: Semester aktif ({semester_aktif}) belum memenuhi syarat minimum (Semester 5)."
+    
+    if total_sks_lulus < minimum_sks:
+        return False, f"Pengajuan ditolak: Total SKS lulus ({total_sks_lulus}) belummencapai syarat minimum ({minimum_sks} SKS)."
+
+    return True, "Syarat semester dan SKS magang terpenuhi."
+
+"""
+    surat rekomendasi beasiswa 
+"""
 def verify_scholarship_eligibility(student_data, minimum_gpa=3.25):
     """
     Helper untuk memvalidasi syarat akademik (IPK minimum) 
@@ -78,22 +88,25 @@ def check_active_scholarship_status(student_data):
     
     return True, "Belum ada beasiswa aktif yang terdaftar."
 
-def verify_internship_semester_and_credits(student_data, minimum_sks=60):
+ 
+   
+def check_semester_registration(student_nim, student_courses_data, semester_aktif):
     """
-    Helper untuk memvalidasi apakah mahasiswa sudah memenuhi syarat SKS minimum 
-    dan berada di semester yang diperbolehkan untuk mengambil magang.
+    Helper untuk memvalidasi apakah mahasiswa sudah mengisi KRS 
+    dan mengambil mata kuliah di semester aktifnya.
     """
-    total_sks_lulus = student_data.get("total_sks_lulus", 0)
-    semester_aktif = student_data.get("semester_aktif", 1)
-
-    # Contoh aturan: Magang biasanya boleh diambil mulai semester 5 dengan minimal 80 SKS lulus
-    if semester_aktif < 5:
-        return False, f"Pengajuan ditolak: Semester aktif ({semester_aktif}) belum memenuhi syarat minimum (Semester 5)."
+    enrolled_courses = [
+        sc for sc in student_courses_data 
+        if sc["nim"] == student_nim 
+        and sc["semester_taken"] == semester_aktif 
+        and sc["status_krs"] == "AMBIL"
+    ]
     
-    if total_sks_lulus < minimum_sks:
-        return False, f"Pengajuan ditolak: Total SKS lulus ({total_sks_lulus}) belummencapai syarat minimum ({minimum_sks} SKS)."
+    if len(enrolled_courses) > 0:
+        return True, f"Valid: Terdaftar pada {len(enrolled_courses)} mata kuliah semester aktif."
+    return False, "Pengajuan ditolak: Mahasiswa belum melakukan pengisian KRS semester aktif."
 
-    return True, "Syarat semester dan SKS magang terpenuhi."
+
 
 def verify_observation_course_enrolled(student_nim, course_code, student_courses_data):
     """

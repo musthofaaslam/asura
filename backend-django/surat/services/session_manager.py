@@ -1,9 +1,10 @@
 import json
 import logging
+import copy
 from typing import Dict, Any, Optional
 from django.core.cache import cache
 from surat.models import ChatThread, ChatMessage
-from .chat_workflow import handle_incoming_chat_with_redis
+from .slot_processor import handle_incoming_chat_with_redis
 
 logger = logging.getLogger(__name__)
 
@@ -15,24 +16,63 @@ class AutoSuratSessionManager:
         return f"autosurat:session:{thread_id}"
 
     @classmethod
-    def get_session(cls, thread_id: str) -> Dict[str, Any]:
+    def initialize_thread(cls, user_obj, initial_title: str = "Percakapan Baru") -> ChatThread:
+        """
+        Fungsi eksplisit untuk endpoint /chat/init/ (atau tombol New Chat).
+        Membuat thread baru di PostgreSQL dan mendaftarkan state awalnya ke Redis.
+        """
+        thread = ChatThread.objects.create(
+            user=user_obj,
+            title=initial_title,
+            status=ChatThread.ThreadStatus.ACTIVE
+        )
+        
+        initial_session_data = {
+            "state": "ACTIVE",
+            "intent": None,
+            "pending_intent": None,
+            "sub_state": "NORMAL_COLLECTION",
+            "is_waiting_for_switch_confirmation": False,
+            "slots": {},
+            "missing_slots": []
+        }
+        
+        redis_key = cls._get_redis_key(str(thread.id))
+        cache.set(redis_key, initial_session_data, timeout=cls.TTL_SECONDS)
+        
+        return thread
+
+    @classmethod
+    def get_session(cls, thread_id: str, user_obj=None) -> Dict[str, Any]:
         """Mengambil state aktif dari Redis, sekaligus verifikasi lazy-expiration database."""
         redis_key = cls._get_redis_key(thread_id)
         session_data = cache.get(redis_key)
 
         if not session_data:
-            thread = ChatThread.objects.filter(id=thread_id, status=ChatThread.ThreadStatus.ACTIVE).first()
-            if thread:
-                thread.status = ChatThread.ThreadStatus.EXPIRED
-                thread.save(update_fields=['status', 'updated_at'])
+            thread_query = ChatThread.objects.filter(id=thread_id)
+            if user_obj:
+                thread_query = thread_query.filter(user=user_obj)
             
-            # Struktur default state di Redis jika cache kosong/expired
+            thread = thread_query.first()
+            
+            if thread:
+                if thread.status == ChatThread.ThreadStatus.ACTIVE:
+                    thread.status = ChatThread.ThreadStatus.EXPIRED
+                    thread.save(update_fields=['status', 'updated_at'])
+                
+                return {
+                    "state": thread.status,
+                    "intent": None,
+                    "pending_intent": None,
+                    "sub_state": "LOCKED",
+                    "is_waiting_for_switch_confirmation": False,
+                    "slots": {}
+                }
+            
             return {
-                "state": "ACTIVE",
-                "intent": None,           # Menggantikan active_kode_surat
-                "pending_intent": None,   # Untuk fitur switch intent
-                "is_waiting_for_switch_confirmation": False,
-                "slots": {}               # Tempat accumulative payload terkumpul
+                "state": "NOT_FOUND",
+                "sub_state": "LOCKED",
+                "slots": {}
             }
 
         return session_data
@@ -42,6 +82,7 @@ class AutoSuratSessionManager:
         cls, 
         thread_id: str, 
         state: str, 
+        sub_state: Optional[str] = None,
         intent: Optional[str] = None, 
         slots: Optional[Dict[str, Any]] = None, 
         missing_slots: Optional[list] = None,
@@ -55,6 +96,7 @@ class AutoSuratSessionManager:
         updated_data = {
             "state": state,
             "intent": intent if intent is not None else existing.get("intent"),
+            "sub_state": sub_state if sub_state is not None else existing.get("sub_state", "NORMAL_COLLECTION"), 
             "pending_intent": pending_intent if pending_intent is not None else existing.get("pending_intent"),
             "is_waiting_for_switch_confirmation": is_waiting_for_switch_confirmation if is_waiting_for_switch_confirmation is not None else existing.get("is_waiting_for_switch_confirmation", False),
             "slots": slots if slots is not None else existing.get("slots", {}),
@@ -71,18 +113,40 @@ class AutoSuratSessionManager:
         ChatThread.objects.filter(id=thread_id).update(status=target_status)
 
     @classmethod
-    def handle_incoming_message(cls, thread_id: str, user_message: str, user_obj) -> str:
+    def handle_incoming_message(cls, thread_id: Optional[str], user_message: str, user_obj) -> tuple[str, str]:
         """
-        Handler utama di dalam kelas session manager:
-        1. Mengecek keyword pembatalan global (Pilar 5).
-        2. Mengambil state aktif dari Redis (session_data).
-        3. Mencatat riwayat pesan ke PostgreSQL (ChatMessage).
-        4. Meneruskan ke orkestrator state & slot filling.
+        Handler utama dengan dukungan Lazy Initialization & Pengamanan Sesi Expired/Cancelled:
+        1. Menangani Lazy Initialization jika thread_id kosong/null/baru.
+        2. Cek status sesi (ACTIVE, EXPIRED, CANCELLED, NOT_FOUND).
+        3. Interceptor Keyword Pembatalan Global.
+        4. Pencatatan riwayat & eksekusi orkestrator.
+        
+        Returns:
+            tuple: (reply_message, active_thread_id)
         """
         cleaned_msg = user_message.strip()
         cleaned_msg_lower = cleaned_msg.lower()
 
-        # 1. Interceptor Keyword Pembatalan (Global di semua state)
+        # --- FITUR LAZY INITIALIZATION ---
+        if not thread_id:
+            new_thread = cls.initialize_thread(user_obj, initial_title=cleaned_msg[:30] + "...")
+            thread_id = str(new_thread.id)
+
+        session_data = cls.get_session(thread_id, user_obj)
+        current_state = session_data.get("state")
+
+        # --- PENGAWASAN SESI EXPIRED / CANCELLED / NOT_FOUND ---
+        if current_state in ["EXPIRED", "CANCELLED", "NOT_FOUND"]:
+            if current_state == "EXPIRED":
+                msg = "[SESSION_EXPIRED] Sesi Anda telah kedaluwarsa karena tidak ada aktivitas selama 30 menit. Silakan buat percakapan baru (New Chat) untuk melanjutkan."
+            elif current_state == "CANCELLED":
+                msg = "[SESSION_CANCELLED] Sesi permohonan surat ini telah dibatalkan. Silakan buat percakapan baru (New Chat) jika ingin mulai kembali."
+            else:
+                msg = "[THREAD_NOT_FOUND] Sesi percakapan tidak ditemukan. Silakan buat percakapan baru."
+            
+            return msg, thread_id
+
+        # 1. Interceptor Keyword Pembatalan Global
         cancellation_keywords = ["batal", "reset", "cancel", "mulai ulang", "stop", "hentikan", "hapus"]
         if cleaned_msg_lower in cancellation_keywords:
             cls.clear_session(thread_id, target_status=ChatThread.ThreadStatus.CANCELLED)
@@ -90,27 +154,22 @@ class AutoSuratSessionManager:
                 document_type=None, 
                 title="Permohonan Surat Dibatalkan"
             )
-            return "Sesi permohonan surat ini telah dibatalkan. Ketik jenis surat apa yang ingin kamu buat jika ingin mulai kembali."
+            return "[SESSION_CANCELLED] Sesi permohonan surat ini telah dibatalkan. Silakan buat percakapan baru (New Chat) jika ingin mulai kembali.", thread_id
 
-        # 2. Ambil sesi aktif dari Redis
-        session_data = cls.get_session(thread_id)
-        if session_data.get("state") == "EXPIRED":
-            return "Sesi Anda telah kedaluwarsa karena tidak ada aktivitas selama 30 menit. Silakan buat sesi/thread baru."
-
-        # 3. Log pesan masuk ke PostgreSQL (ChatMessage history)
+        # 2. Log pesan masuk ke PostgreSQL
         thread = ChatThread.objects.filter(id=thread_id, user=user_obj).first()
         if thread:
             ChatMessage.objects.create(
                 thread=thread,
                 sender='user',
                 message=user_message,
-                slots_snapshot=session_data.get("slots", {})
+                slots_snapshot=copy.deepcopy(session_data.get("slots", {}))
             )
 
-        # 4. Teruskan ke orkestrator logika alur chat (di file chat_workflow_service.py)
+        # 3. Teruskan ke orkestrator logika alur chat
         reply_message = handle_incoming_chat_with_redis(thread_id, cleaned_msg, session_data)
 
-        # 5. Simpan kembali pembaruan state session_data ke Redis Cache (Sliding TTL)
+        # 4. Simpan kembali pembaruan state session_data ke Redis Cache (Sliding TTL)
         cache.set(cls._get_redis_key(thread_id), session_data, timeout=cls.TTL_SECONDS)
 
-        return reply_message
+        return reply_message, thread_id

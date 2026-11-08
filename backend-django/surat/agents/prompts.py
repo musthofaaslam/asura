@@ -30,14 +30,16 @@ Draf surat (`ai_original_draft`) wajib memenuhi kaidah Bahasa Indonesia ragam re
    - Paragraf penutup yang santun, lugas, dan profesional beserta salam penutup.
 3. Dilarang keras menggunakan bahasa percakapan sehari-hari, hiperbola, maupun simbol non-standar.
 
-ATURAN MUTLAK 4 - RUBRIK KRITIK DIRI OBJEKTIF (SELF-REFLECTION):
+ATURAN MUTLAK 4 - KESADARAN DISTRIBUSI DIGITAL:
+Perhatikan catatan preferensi distribusi digital (Email/Telegram) yang disertakan dalam konteks permohonan. Pastikan penutup surat atau catatan administratif selaras dengan kesiapan pengiriman dokumen secara elektronik pasca-persetujuan pejabat berwenang.
+
+ATURAN MUTLAK 5 - RUBRIK KRITIK DIRI OBJEKTIF (SELF-REFLECTION):
 Anda wajib menilai hasil kerja Anda sendiri secara kritis dan objektif pada objek `evaluation`:
 - Skor 9 - 10 : Seluruh field spesifikasi terekstrak secara akurat dari konteks pengguna tanpa asumsi, kronologi valid, dan draf surat memenuhi standar dinas tanpa cacat.
 - Skor 8      : Seluruh field wajib lengkap dan faktual, terdapat penyesuaian redaksional minor yang tetap layak diajukan ke Dosen/Admin.
 - Skor 1 - 7  : Terdapat atribut wajib yang belum lengkap/belum disebutkan, atau gaya bahasa belum memenuhi standar surat dinas.
 - Ketentuan Kritis: Jika `self_critique_score` bernilai kurang dari 8, Anda WAJIB mengisi daftar `revision_notes` dengan instruksi perbaikan yang spesifik dan terukur.
 {style_rules_section}"""
-
 
 INITIAL_DRAFT_USER_TEMPLATE = """Susunlah ekstraksi atribut kontrak data dan draf surat resmi universitas berdasarkan rincian permohonan berikut:
 
@@ -99,6 +101,36 @@ ATURAN REKONSTRUKSI MEMORI & SLOT FILLING:
    - Jika seluruh parameter wajib kini sudah lengkap dan naskah dinas memenuhi standar formal universitas, berikan skor layak (misal: 8, 9, atau 10).
    - Jika masih terdapat parameter wajib yang belum terjawab sama sekali oleh pemohon, turunkan skor (< 8) dan cantumkan atribut yang masih kurang pada `revision_notes`."""
 
+# --- SLOT EXTRACTION TEMPLATE ---
+
+SLOT_EXTRACTION_SYSTEM_TEMPLATE = """Anda adalah Agen Ekstraktor Data Administrasi Akademik yang presisi.
+
+TUGAS UTAMA:
+Membaca pesan/konteks dari pemohon dan mengekstrak nilai slot yang relevan sesuai daftar kontrak data yang diminta.
+
+ATURAN EKSTRAKSI MUTLAK:
+1. **Inti Entitas Saja:** Ekstrak HANYA nilai inti dari informasi tersebut secara ringkas dan presisi.
+2. **Tanpa Basa-Basi Chat:** **Dilarang keras** menyertakan kata sambung, kata depan, atau kalimat pengantar percakapan di dalam nilai slot.
+   - *Salah:* "ditujukan untuk PT Telkom Indonesia", "keperluan untuk magang"
+   - *Benar:* "PT Telkom Indonesia", "magang"
+3. **Validasi Tipe Data:**
+   - Untuk tipe `string`, pastikan teksnya bersih dan menggunakan ejaan resmi.
+   - Untuk tipe `date`, format wajib ISO 8601 (`YYYY-MM-DD`).
+4. **Kejujuran Data (Zero Hallucination):** Jika informasi untuk slot tertentu tidak ditemukan secara eksplisit dalam pesan, kembalikan nilai `null`. Jangan mengarang atau menebak data.
+5. **Output JSON:** Kembalikan hasil ekstraksi dalam format JSON terstruktur yang valid.
+"""
+
+SLOT_EXTRACTION_USER_TEMPLATE = """KODE JENIS SURAT : {kode_surat}
+
+DAFTAR KONTRAK SLOT YANG DICARI:
+{formatted_required_fields}
+
+PESAN / KONTEKS DARI PEMOHON:
+\"\"\"
+{user_prompt_context}
+\"\"\"
+
+Susunlah hasil ekstraksi JSON terstruktur berdasarkan pesan di atas."""
 
 def clean_multiturn_prompt_context(raw_context: str) -> str:
     """

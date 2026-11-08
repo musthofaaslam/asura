@@ -407,3 +407,26 @@ class SuratVerifyInvalidResponseSerializer(serializers.Serializer):
     message = serializers.CharField(
         default="Dokumen Surat TIDAK VALID atau palsu. Token verifikasi tidak ditemukan di sistem."
     )
+
+
+
+class ChatMessageInputSerializer(serializers.Serializer):
+    """Serializer input untuk Single Endpoint Chat Mahasiswa"""
+    thread_id = serializers.UUIDField(
+        required=True,
+        help_text="UUID dari thread chat aktif."
+    )
+    message = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        help_text="Pesan atau jawaban yang diketik oleh mahasiswa."
+    )
+    
+class ChatMessageResponseSerializer(serializers.Serializer):
+    """Serializer output untuk respons dari Orkestrator Chat"""
+    status = serializers.CharField(default="success")
+    state = serializers.CharField(help_text="State aktif sesi saat ini (misal: COLLECTING_SLOTS, READY_TO_DRAFT)")
+    reply = serializers.CharField(help_text="Balasan teks dari asisten AI/Bot")
+    detected_intent = serializers.CharField(required=False, allow_null=True)
+    collected_slots = serializers.JSONField(required=False, default=dict)
+    required_fields = serializers.ListField(required=False, default=list)

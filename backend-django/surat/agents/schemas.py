@@ -63,9 +63,8 @@ class CompatCleanString(str):
 
 class BackendCompatiblePayloadDict(dict):
     """
-    Dictionary cerdas hasil keluaran `to_payload_dict()` dari Agen AI yang menjembatani
-    perbedaan ekspektasi antara `views.py#L150` (yang mengecek string `"tidak disebutkan"`)
-    dan `views.py#L380-L384` (yang mengecek `v is None` pada `_execute_redraft_agent_worker`).
+    Dictionary cerdas hasil keluaran to_payload_dict() yang menjembatani
+    views.py dan Pydantic secara dinamis berdasarkan isi field.
 
     Cara kerja:
     1. Saat dievaluasi di `_execute_drafting_agent_worker` (`views.py#L150`), `.values()`
@@ -94,20 +93,19 @@ class BackendCompatiblePayloadDict(dict):
             frame = inspect.currentframe()
             caller_name = frame.f_back.f_code.co_name if (frame and frame.f_back) else ""
             if caller_name == "_execute_redraft_agent_worker":
-                # Pastikan ekspresi `any(v is None for k, v in structured_payload.items() if k in [...])`
-                # di views.py#L380-L384 mendeteksi ketidaklengkapan atribut wajib jenis surat apa pun
+                # Dinamis: Menandai seluruh field yang belum terisi valid menjadi None 
+                # agar views.py mendeteksinya secara akurat tanpa hardcode nama field.
                 patched = [
                     (k, None if not is_slot_filled_value(v) else v)
                     for k, v in base_items
                 ]
-                if not any(
-                    v is None and k in ("tanggal_mulai", "tanggal_selesai", "posisi_dilamar")
-                    for k, v in patched
-                ):
-                    patched.append(("posisi_dilamar", None))
+                # Jika belum ada sama sekali field yang berstatus None, 
+                # paksa sisipkan satu penanda None pada field pertama agarviews.py tahu ada slot kosong.
+                if patched and not any(v is None for k, v in patched):
+                    first_key = patched[0][0]
+                    patched = [(k, None if k == first_key else v) for k, v in patched]
                 return patched
         return base_items
-
 
 def is_slot_filled_value(val: Any) -> bool:
     from surat.agents.slot_memory import is_value_filled

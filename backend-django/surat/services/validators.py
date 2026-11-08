@@ -20,6 +20,33 @@ def validate_global_requirement(student_data):
     if not is_active:
         raise serializers.ValidationError(msg)
 
+"""
+    validasi rekomendasi beasiswa
+"""
+def validate_sr_bea(student_data, payload) :
+    is_valid, msg = verify_scholarship_eligibility(student_data)
+    if not is_valid:
+        raise serializers.ValidationError(msg)
+
+    is_valid, msg = check_active_scholarship_status(student_data)
+    if not is_valid:
+        raise serializers.ValidationError(msg)
+
+
+"""
+    validasi rekomendasi magang 
+"""
+def validate_sr_mag(student_data, payload):
+    is_valid, msg = verify_internship_semester_and_credits(student_data)
+    if not is_valid:
+        raise serializers.ValidationError(msg)
+
+    is_valid, msg = verify_ethical_policy(student_data)
+    if not is_valid:
+        raise serializers.ValidationError(msg)
+
+
+
 def validate_sk_kul(student_data, payload):
     pass
 
@@ -60,14 +87,6 @@ def validate_sp_mag(student_data, payload):
     if not is_valid:
         raise serializers.ValidationError(msg)
         
-def validate_sr_bea(student_data, payload) :
-    is_valid, msg = verify_scholarship_eligibility(student_data)
-    if not is_valid:
-        raise serializers.ValidationError(msg)
-
-    is_valid, msg = check_active_scholarship_status(student_data)
-    if not is_valid:
-        raise serializers.ValidationError(msg)
 
 def validate_sr_mag(student_data, payload):
     is_valid, msg = verify_internship_semester_and_credits(student_data)
@@ -97,17 +116,21 @@ def validate_si_sur(student_data, payload, student_courses_data):
         raise serializers.ValidationError(msg)
     
 SURAT_VALIDATORS = {
+    "SR-BEA": validate_sr_bea,
+    "SR-MAG": validate_sr_mag,
+    
+    
     "SK-KUL": validate_sk_kul,
     "SK-BEA": validate_sk_bea,
     "SP-TRA": validate_sp_tra,
     "SP-SKC": validate_sp_skc,
     "SP-TAS": validate_sp_tas,
     "SP-MAG": validate_sp_mag,
-    "SR-BEA": validate_sr_bea,
-    "SR-MAG": validate_sr_mag,
     "SI-MAG": validate_si_mag,
     "SI-SUR": validate_si_sur,
 }
+
+
 def run_validators(kode_surat, student_data, payload, student_courses_data=None):
     """Fungsi orkestrator utama untuk menjalankan global dan specific check."""
     # 1. Jalankan validasi global terlebih dahulu

@@ -4,14 +4,6 @@ from google import genai  # atau library client LLM yang kamu gunakan
 
 # 1. Definisikan Enum kaku berdasarkan daftar kode surat resmi di database
 class SuratIntentEnum(str, Enum):
-    SI_MAG = "SI-MAG"
-    SI_SUR = "SI-SUR"
-    SK_BEA = "SK-BEA"
-    SK_KUL = "SK-KUL"
-    SP_MAG = "SP-MAG"
-    SP_SKC = "SP-SKC"
-    SP_TAS = "SP-TAS"
-    SP_TRA = "SP-TRA"
     SR_BEA = "SR-BEA"
     SR_MAG = "SR-MAG"
 
