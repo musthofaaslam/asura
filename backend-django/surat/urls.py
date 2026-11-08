@@ -9,15 +9,11 @@ from .views import (
     LecturerApprovalActionAPIView,
     SuratVerifyAPIView,
     
-    SuratRequestRedraftAPIView,
-    SuratRequestCreateAPIView,
-    SuratRequestRedraftAPIView,
-    ChatSessionMessageAPIView,
     ChatThreadCreateAPIView
 )
 
 urlpatterns = [
-    path('chat/', SuratRequestCreateAPIView.as_view(), name='surat-request-create'),
+    path('chat/', AutoSuratChatAPIView.as_view(), name='auto-surat-chat'),
     
     path('types/', SuratTypeListAPIView.as_view(), name='surat-type-list'),
     path('requests/', SuratRequestListAPIView.as_view(), name='surat-request-list'),
