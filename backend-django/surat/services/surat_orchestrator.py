@@ -4,7 +4,6 @@ from typing import Dict, Any, Optional
 from django.db import close_old_connections
 
 from .letter_agent import SuratDraftingAgent, LetterAgent
-from .session_manager import AutoSuratSessionManager
 from .detect_intent import detect_intent_dynamically
 from .route_intent import route_intent_with_ai
 from surat.models import SuratType, SuratRequest, ChatThread
@@ -23,6 +22,7 @@ class SuratWorkflowOrchestrator:
     @classmethod
     def process_incoming_chat(cls, thread_id: Optional[str], user_message: str, user_obj) -> Dict[str, Any]:
         # 1. Tangani Lazy Initialization jika thread_id kosong/null
+        from .session_manager import AutoSuratSessionManager
         if not thread_id:
                 new_thread = AutoSuratSessionManager.initialize_thread(user_obj, initial_title=user_message[:30])
                 thread_id = str(new_thread.id)
@@ -96,6 +96,7 @@ class SuratWorkflowOrchestrator:
         Tahap 1: Mendeteksi jenis surat (intent) dari pesan pertama user menggunakan 
         modul detect_intent dan route_intent yang sudah ada.
         """
+        from .session_manager import AutoSuratSessionManager
         cleaned_msg = user_message.strip()
 
         # 1. Deteksi intent (Lapis 1: Keyword/Alias -> Lapis 2: AI Router)
@@ -154,6 +155,7 @@ class SuratWorkflowOrchestrator:
 
         # 1. Cek apakah user sedang dalam proses konfirmasi switch intent (pindah surat)
         if session_data.get("is_waiting_for_switch_confirmation"):
+            from .session_manager import AutoSuratSessionManager
             thread_obj = ChatThread.objects.filter(id=thread_id).first()
             
             reply_msg = handle_switch_confirmation_redis(cleaned_msg, thread_id, session_data, thread_obj)
@@ -192,6 +194,7 @@ class SuratWorkflowOrchestrator:
         positive_keywords = ["ya", "oke", "ok", "benar", "lanjut", "siap", "siyap"]
         is_approved = any(kw in user_message.lower() for kw in positive_keywords)
 
+        from .session_manager import AutoSuratSessionManager
         if is_approved:
             kode_surat = session_data.get("intent")
             slots = session_data.get("slots", {})
@@ -371,6 +374,7 @@ class SuratWorkflowOrchestrator:
         # 1. Ambil ID SuratRequest aktif dari session atau cari di database
         surat_request_id = session_data.get("active_surat_request_id")
         
+        from .session_manager import AutoSuratSessionManager
         if not surat_request_id:
             try:
                 student_obj = user_obj.student_profile
