@@ -4,7 +4,7 @@ import copy
 from typing import Dict, Any, Optional
 from django.core.cache import cache
 from surat.models import ChatThread, ChatMessage
-from .slot_processor import handle_incoming_chat_with_redis
+from surat.services.surat_orchestrator import SuratWorkflowOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -167,8 +167,9 @@ class AutoSuratSessionManager:
             )
 
         # 3. Teruskan ke orkestrator logika alur chat
-        reply_message = handle_incoming_chat_with_redis(thread_id, cleaned_msg, session_data)
-
+        orchestrator_result = SuratWorkflowOrchestrator.process_incoming_chat(thread_id, cleaned_msg, user_obj)
+        reply_message = orchestrator_result.get("message", "")
+        
         # 4. Simpan kembali pembaruan state session_data ke Redis Cache (Sliding TTL)
         cache.set(cls._get_redis_key(thread_id), session_data, timeout=cls.TTL_SECONDS)
 

@@ -2,6 +2,7 @@ import re
 from typing import Dict, Any
 from surat.models import SuratType
 from surat.agents.slot_memory import SlotMemoryManager, is_value_filled
+from .session_manager import AutoSuratSessionManager
 
 def handle_switch_confirmation_redis(user_message: str, thread_id: str, session_data: dict, thread_obj) -> str:
     """Menangani konfirmasi saat mahasiswa ingin beralih jenis surat di tengah jalan[cite: 1]."""
@@ -54,7 +55,6 @@ def handle_destination_type_selection(user_message: str, session_data: dict, cur
 
 def handle_destination_address_input(user_message: str, session_data: dict, current_slots: dict, thread_id: str) -> str:
     """Menangkap alamat tujuan, lalu mengubah sub_state ke konfirmasi akhir di orkestrator."""
-    from .session_manager import AutoSuratSessionManager
     address = user_message.strip()
     current_slots["target_destination_address"] = address
     session_data["slots"] = current_slots
