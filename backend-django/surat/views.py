@@ -952,7 +952,7 @@ class SuratVerifyAPIView(APIView):
             }
         }, status=status.HTTP_200_OK)
 
-from .services.surat_orchestrator import AutoSuratOrchestrator
+from .services.surat_orchestrator import SuratWorkflowOrchestrator
 from surat.services.validators import run_validators
 
 class AutoSuratChatAPIView(APIView):
@@ -1032,7 +1032,7 @@ class AutoSuratChatAPIView(APIView):
                         }, status=status.HTTP_400_BAD_REQUEST)
 
             # 4. Lempar ke Orkestrator Utama jika validasi lolos atau alur chat masih berjalan normal
-            result = AutoSuratOrchestrator.process_incoming_chat(
+            result = SuratWorkflowOrchestrator.process_incoming_chat(
                 thread_id=thread_id,
                 user_message=user_message,
                 user_obj=request.user
