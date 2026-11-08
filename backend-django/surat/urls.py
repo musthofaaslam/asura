@@ -22,6 +22,6 @@ urlpatterns = [
     path('verify/<str:token>/', SuratVerifyAPIView.as_view(), name='surat-verify'), 
     # path('request/', SuratRequestCreateAPIView.as_view(), name='surat-request-create'),
     # path('requests/<int:pk>/re-draft/', SuratRequestRedraftAPIView.as_view(), name='surat-request-redraft'),
-    # path('chat/init/', ChatThreadCreateAPIView.as_view(), name='chat-init'),
+    path('chat/init/', ChatThreadCreateAPIView.as_view(), name='chat-init'),
     # path('chat/<str:thread_id>/', ChatSessionMessageAPIView.as_view(), name='chat-session')
 ]
