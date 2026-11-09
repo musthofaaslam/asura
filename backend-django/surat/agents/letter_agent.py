@@ -1144,6 +1144,76 @@ class SuratDraftingAgent:
 
         return extract_dynamic_fields_from_surat_type(surat_type)
 
+    def extract_slots_from_text(
+        self,
+        user_prompt_context: str,
+        kode_surat: str,
+        required_fields: List[Dict[str, str]],
+        current_slots: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        """
+        Mengekstrak slot/parameter secara spesifik dari teks bebas pengguna
+        dengan penanganan konteks kumulatif dan zero-hallucination.
+        """
+        output_schema = self.resolve_output_schema(kode_surat, required_fields)
+        
+        # Buat deskripsi field agar LLM paham apa yang harus diekstrak
+        fields_desc_lines = []
+        for rf in required_fields:
+            f_name = rf.get("field")
+            f_label = rf.get("label", f_name)
+            f_desc = rf.get("description", "")
+            fields_desc_lines.append(f"- Field key: \"{f_name}\" (Label: {f_label}) -> {f_desc}")
+        fields_desc_str = "\n".join(fields_desc_lines)
+        
+        existing_info_str = ""
+        if current_slots:
+            existing_info_str = f"\nSlot yang sudah terisi sebelumnya:\n{json.dumps(current_slots, ensure_ascii=False, indent=2)}\n"
+
+        system_prompt = (
+            "Anda adalah mesin ekstraksi data (Slot-Filling Extractor) untuk layanan surat resmi universitas. "
+            "Tugas Anda adalah membaca pesan terbaru pengguna dan mengekstrak nilai untuk parameter/slot yang diminta.\n"
+            "ATURAN KETAT:\n"
+            "1. Hanya ekstrak informasi yang secara eksplisit atau jelas tersirat dari teks pengguna.\n"
+            "2. Jangan mengarang, menebak, atau memalsukan data.\n"
+            "3. Jika suatu informasi tidak disebutkan dalam pesan terbaru, biarkan kosong atau null, jangan menimpa data lama yang sudah ada.\n"
+            "4. Normalisasikan penulisan nama instansi atau keperluan dengan baik (misal kapitalisasi awal kata yang tepat)."
+        )
+        
+        user_prompt = (
+            f"Daftar parameter/slot yang harus dicari:\n{fields_desc_str}\n"
+            f"{existing_info_str}\n"
+            f"Pesan Terbaru Pengguna: \"{user_prompt_context}\"\n\n"
+            f"Ekstrak nilai slot yang relevan dari pesan pengguna di atas ke dalam skema payload yang ditentukan."
+        )
+        
+        # Panggil LLM menggunakan infrastruktur structured output yang ada
+        try:
+            result = self._invoke_structured_llm(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                response_schema=output_schema,
+            )
+        except Exception as exc:
+            logger.error("Gagal melakukan ekstraksi slot LLM: %s", exc)
+            # Kembalikan objek kosong agar tertangkap dengan aman oleh mekanisme fallback slot_processor
+            raise exc
+
+        # Bungkus hasil agar kompatibel dengan pemanggilan di slot_processor.py
+        class ExtractionWrapper:
+            def __init__(self, parsed_obj):
+                if hasattr(parsed_obj, "extracted_payload"):
+                    payload_obj = parsed_obj.extracted_payload
+                    self.extracted_slots = payload_obj.model_dump() if hasattr(payload_obj, "model_dump") else dict(payload_obj)
+                elif hasattr(parsed_obj, "model_dump"):
+                    self.extracted_slots = parsed_obj.model_dump()
+                elif isinstance(parsed_obj, dict):
+                    self.extracted_slots = parsed_obj
+                else:
+                    self.extracted_slots = {}
+
+        return ExtractionWrapper(result)
+    
     def run(
         self,
         user_prompt_context: str,
