@@ -164,17 +164,21 @@ class SuratWorkflowOrchestrator:
         AutoSuratSessionManager.save_session(thread_id, session_data)
 
         # 4. Berikan respons selamat datang sekaligus menagih slot pertama
-        welcome_msg = (
-            f"Baik, kita akan memproses **{surat_obj.nama_surat}** ({detected_kode_surat}). "
-            f"Mari lengkapi data yang diperlukan!\n\n"
-        )
+        required_fields = surat_obj.required_payload_fields or []
+        if required_fields:
+            first_field = required_fields[0]
+            first_label = first_field.get("label", first_field.get("field", "data utama"))
+        else:
+            first_label = "data yang diperlukan"
 
-        # Lempar ke fungsi slot filling untuk menanyakan data pertama yang kosong
-        slot_response = process_slot_filling_redis(cleaned_msg, session_data)
+        welcome_msg = (
+            f"Siap! Saya bantu proses **{surat_obj.nama_surat}** ({detected_kode_surat}) ya.\n\n"
+            f"Untuk memulainya, boleh informasikan **{first_label}** terlebih dahulu?"
+        )
 
         return {
             "status": "success",
-            "message": welcome_msg + (slot_response if isinstance(slot_response, str) else slot_response.get("message", ""))
+            "message": welcome_msg
         }
         
     @classmethod
