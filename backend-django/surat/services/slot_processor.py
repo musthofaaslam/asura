@@ -99,77 +99,68 @@ def handle_destination_address_input(user_message: str, session_data: dict, curr
 
 
 def process_slot_filling_redis(user_message: str, session_data: dict) -> str:
-    """Pendekatan Murni Deterministik: Berbasis Urutan Indeks (Sequential), Aman & Cepat[cite: 1]."""
+    """Pendekatan Murni Deterministik: Berbasis Cek Key Kosong, Aman & Konsisten."""
     try:
         surat_type = SuratType.objects.get(kode_surat=session_data.get("intent"))
     except SuratType.DoesNotExist:
         return "Terjadi kesalahan sistem: Jenis surat tidak ditemukan."
 
     required_fields = surat_type.required_payload_fields or []
-    current_slots = session_data.get("slots", {})
     
-    slot_mgr = SlotMemoryManager(
-        kode_surat=surat_type.kode_surat,
-        required_fields=required_fields,
-        initial_slots=current_slots
-    )
-
+    # 1. Pastikan mengambil slot terbaru dari session_data
+    current_slots = session_data.get("slots", {})
+    if not isinstance(current_slots, dict):
+        current_slots = {}
+    
+    existing_slots = dict(current_slots)
     thread_id = session_data.get("thread_id") or ""
 
-    # Jika slot utama sudah lengkap, langsung lanjut ke pengisian destinasi
-    if slot_mgr.is_complete():
-        return handle_destination_selection(user_message, session_data, current_slots, thread_id)
+    # 2. Cari field wajib PERTAMA yang key-nya BELUM ADA di `existing_slots` atau nilainya kosong
+    target_field_key = None
+    for item in required_fields:
+        f_key = item.get("field")
+        if not existing_slots.get(f_key):  # Belum terisi
+            target_field_key = f_key
+            break
 
-    # 1. Ambil slot saat ini dari sesi
-    existing_slots = dict(current_slots)
+    # Jika semua field sudah terisi, langsung lanjut ke destinasi
+    if not target_field_key:
+        return handle_destination_selection(user_message, session_data, existing_slots, thread_id)
 
-    # 2. Inisialisasi manager dengan slot terkini
-    slot_mgr = SlotMemoryManager(
-        kode_surat=surat_type.kode_surat,
-        required_fields=required_fields,
-        initial_slots=existing_slots
-    )
-
-    # 3. Cari field wajib pertama yang masih kosong
-    missing_fields = slot_mgr.get_missing_fields(existing_slots)
-    
-    if missing_fields and user_message.strip():
-        target_field_obj = missing_fields[0]
-        target_field_key = target_field_obj.get("field")
-
-        # Masukkan input user ke field kosong urutan pertama tersebut
+    # 3. Masukkan input user secara deterministik ke field kosong yang sedang ditagih
+    if user_message.strip():
         cleaned_val = sanitize_extracted_slot(target_field_key, user_message)
         existing_slots[target_field_key] = cleaned_val
 
-    # 4. 🔑 SIMPAN KE SESSION & REDIS SECARA EKSPLISIT
+    # 4. Simpan kembali ke session_data dan Redis secara eksplisit
     session_data["slots"] = existing_slots
-    
     if thread_id:
         AutoSuratSessionManager.save_session(thread_id, session_data)
 
-    # 5. Inisialisasi ulang manager dengan data `existing_slots` terbaru 
-    # untuk mengecek apakah sudah 100% lengkap atau bergeser ke field berikutnya
-    updated_slot_mgr = SlotMemoryManager(
+    # 5. Cek ulang apakah setelah pengisian ini seluruh field sudah lengkap
+    slot_mgr = SlotMemoryManager(
         kode_surat=surat_type.kode_surat,
         required_fields=required_fields,
         initial_slots=existing_slots
     )
-
-    if updated_slot_mgr.is_complete(existing_slots):
+    
+    if slot_mgr.is_complete(existing_slots):
         return handle_destination_selection(user_message, session_data, existing_slots, thread_id)
 
-    # 6. Buat checklist status berdasarkan `existing_slots` yang sudah terupdate
+    # 6. Buat checklist status dan cari field kosong berikutnya
     checklist_lines, _, _ = generate_checklist_status_response(surat_type, existing_slots)
     formatted_checklist = "\n".join(checklist_lines)
     
-    updated_missing = updated_slot_mgr.get_missing_fields(existing_slots)
+    # Cari target field berikutnya yang masih kosong
     next_target_prompt = "Mohon lengkapi atribut berikutnya."
-    if updated_missing:
-        next_field = updated_missing[0]
-        field_label = next_field.get("label", next_field.get("field"))
-        field_desc = next_field.get("description", "")
-        desc_str = f" Keterangan: {field_desc}." if field_desc else ""
-        next_target_prompt = f"👉 Atribut '{field_label}' ({next_field.get('field')}) belum disebutkan.{desc_str}"
+    for item in required_fields:
+        f_key = item.get("field")
+        if not existing_slots.get(f_key):
+            field_label = item.get("label", f_key)
+            field_desc = item.get("description", "")
+            desc_str = f" Keterangan: {field_desc}." if field_desc else ""
+            next_target_prompt = f"👉 Atribut '{field_label}' ({f_key}) belum disebutkan.{desc_str}"
+            break
 
     return f"{formatted_checklist}\n\n{next_target_prompt}"
 
