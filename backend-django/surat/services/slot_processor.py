@@ -143,13 +143,13 @@ def process_slot_filling_redis(user_message: str, session_data: dict) -> str:
         thread_id = session_data.get("thread_id") or ""
         return handle_destination_selection(user_message, session_data, updated_slots)
 
-    checklist_lines, _, _ = generate_checklist_status_response(surat_type, updated_slots)
-    formatted_checklist = "\n".join(checklist_lines)
+    # checklist_lines, _, _ = generate_checklist_status_response(surat_type, updated_slots)
+    # formatted_checklist = "\n".join(checklist_lines)
     
     missing_notes = slot_mgr.generate_clarification_notes()
     next_target_prompt = missing_notes[0] if missing_notes else "Mohon lengkapi data yang masih kurang."
     
-    return f"{formatted_checklist}\n\n👉 {next_target_prompt}"
+    return f"Baik, data dicatat. Selanjutnya: {next_target_prompt}"
 
 def generate_checklist_status_response(surat_type, current_slots: dict):
     required_fields = surat_type.required_payload_fields or []
