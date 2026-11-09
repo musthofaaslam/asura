@@ -36,7 +36,7 @@ def route_intent_with_ai(user_message: str) -> str | None:
     try:
         # Memanggil LLM dengan paksaan struktur Pydantic (Structured Outputs)
         response = client.models.generate_content(
-            model='gemini-2.5-flash',  # atau model yang kamu gunakan
+            model='gemini-3.1-flash-lite',  # atau model yang kamu gunakan
             contents=prompt,
             config={
                 'response_mime_type': 'application/json',
