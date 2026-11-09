@@ -3,6 +3,7 @@ import logging
 from typing import Dict, Any
 from surat.models import SuratType
 from surat.agents.slot_memory import SlotMemoryManager, is_value_filled
+from .session_manager import AutoSuratSessionManager
 
 
 logger = logging.getLogger(__name__)
@@ -89,7 +90,7 @@ def handle_destination_selection(user_message: str, session_data: dict, current_
 
 
 def process_slot_filling_redis(user_message: str, session_data: dict) -> str:
-    """Ekstraksi slot bebas, sanitasi regex, dan pengecekan kelengkapan."""
+    """Ekstraksi slot bebas, sanitasi regex, dan pengecekan kelengkapan[cite: 1]."""
     try:
         surat_type = SuratType.objects.get(kode_surat=session_data.get("intent"))
     except SuratType.DoesNotExist:
@@ -106,11 +107,11 @@ def process_slot_filling_redis(user_message: str, session_data: dict) -> str:
 
     thread_id = session_data.get("thread_id") or ""
 
-    # Jika slot utama sudah lengkap, lanjut ke pengisian destinasi (email/telegram)
+    # Jika slot utama sudah lengkap, lanjut ke pengisian destinasi
     if slot_mgr.is_complete():
         return handle_destination_selection(user_message, session_data, current_slots, thread_id)
 
-    # Ekstraksi slot menggunakan AI / Extractor dengan mengirimkan current_slots
+    # Ekstraksi slot menggunakan AI / Extractor
     extracted_data = {}
     try:
         from surat.agents.letter_agent import SuratDraftingAgent
@@ -119,7 +120,7 @@ def process_slot_filling_redis(user_message: str, session_data: dict) -> str:
             user_prompt_context=user_message,
             kode_surat=surat_type.kode_surat,
             required_fields=required_fields,
-            current_slots=slot_mgr.accumulated_slots  # <--- Kirim konteks slot kumulatif
+            current_slots=slot_mgr.accumulated_slots
         )
         extracted_data = getattr(extraction_result, "extracted_slots", {}) or {}
     except Exception:
@@ -138,8 +139,8 @@ def process_slot_filling_redis(user_message: str, session_data: dict) -> str:
     updated_slots = SlotMemoryManager.merge_slots(slot_mgr.accumulated_slots, cleaned_extracted_data)
     slot_mgr.accumulated_slots = updated_slots
     session_data["slots"] = updated_slots
-    from .session_manager import AutoSuratSessionManager
-    # 🔑 FIX UTAMA: Simpan secara eksplisit ke Redis agar tidak ter-reset/looping
+
+    # 🔑 SIMPAN PERMANEN KE REDIS AGAR TIDAK LOOPING
     if thread_id:
         AutoSuratSessionManager.save_session(thread_id, session_data)
 
