@@ -37,17 +37,24 @@ def handle_switch_confirmation_redis(user_message: str, thread_id: str, session_
         return f"Baik, peralihan dibatalkan. Kita tetap melanjutkan pengisian untuk **{active_surat_obj.nama_surat}**."
 
 
-def handle_destination_type_selection(user_message: str, session_data: dict, current_slots: dict) -> str:
+def handle_destination_type_selection(user_message: str, session_data: dict, current_slots: dict, thread_id: str) -> str:
     """Menangkap pilihan jenis destinasi dokumen (Email atau Telegram)."""
     msg_lower = user_message.lower()
     
     if "email" in msg_lower:
         current_slots["chosen_destination"] = "email"
         session_data["slots"] = current_slots
+        # 🔑 WAJIB SIMPAN KE REDIS AGAR TIDAK HILANG
+        if thread_id:
+            AutoSuratSessionManager.save_session(thread_id, session_data)
         return "Baik, terpilih **Email**. Mohon masukkan alamat email tujuan Anda saat ini:"
+        
     elif "telegram" in msg_lower:
         current_slots["chosen_destination"] = "telegram"
         session_data["slots"] = current_slots
+        # 🔑 WAJIB SIMPAN KE REDIS AGAR TIDAK HILANG
+        if thread_id:
+            AutoSuratSessionManager.save_session(thread_id, session_data)
         return "Baik, terpilih **Telegram**. Mohon masukkan nomor **Chat ID Telegram** Anda:"
     else:
         return (
@@ -56,6 +63,25 @@ def handle_destination_type_selection(user_message: str, session_data: dict, cur
             "👉 Silakan ketik pilihan Anda: **Email** atau **Telegram**"
         )
 
+
+def handle_destination_selection(user_message: str, session_data: dict, current_slots: dict, thread_id: str) -> str:
+    """Router internal untuk penanganan destinasi akhir."""
+    if not current_slots.get("chosen_destination"):
+        return handle_destination_type_selection(user_message, session_data, current_slots, thread_id)
+    
+    if not current_slots.get("target_destination_address"):
+        return handle_destination_address_input(user_message, session_data, current_slots, thread_id)
+    
+    # 🔑 JIKA KEDUANYA SUDAH TERISI, PASTIKAN SUB_STATE TERKUNCI KE KONFIRMASI AKHIR
+    session_data["sub_state"] = "WAITING_SLOT_CONFIRMATION"
+    if thread_id:
+        AutoSuratSessionManager.save_session(thread_id, session_data)
+        
+    summary_str = "\n".join([f"- **{k}**: {v}" for k, v in current_slots.items()])
+    return (
+        f"📋 **Ringkasan Data Permohonan:**\n{summary_str}\n\n"
+        f"✨ *Apakah data di atas sudah benar dan siap dibuatkan draf suratnya? (Jawab: **Ya** / **Belum**)*"
+    )
 
 def handle_destination_address_input(user_message: str, session_data: dict, current_slots: dict, thread_id: str) -> str:
     """Menangkap alamat tujuan, lalu mengubah sub_state ke konfirmasi akhir di orkestrator."""
@@ -75,18 +101,6 @@ def handle_destination_address_input(user_message: str, session_data: dict, curr
         f"📋 **Ringkasan Data Permohonan:**\n{summary_str}\n\n"
         f"✨ *Apakah data di atas sudah benar dan siap dibuatkan draf suratnya? (Jawab: **Ya** / **Belum**)*"
     )
-
-
-def handle_destination_selection(user_message: str, session_data: dict, current_slots: dict, thread_id: str) -> str:
-    """Router internal untuk penanganan destinasi akhir."""
-    if not current_slots.get("chosen_destination"):
-        return handle_destination_type_selection(user_message, session_data, current_slots)
-    
-    if not current_slots.get("target_destination_address"):
-        return handle_destination_address_input(user_message, session_data, current_slots, thread_id)
-    
-    return "Silakan konfirmasikan apakah data sudah benar dengan mengetik **'Ya'** atau **'Belum'**."
-
 
 def process_slot_filling_redis(user_message: str, session_data: dict) -> str:
     """Ekstraksi slot bebas, sanitasi regex, dan pengecekan kelengkapan[cite: 1]."""
