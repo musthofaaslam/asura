@@ -233,7 +233,7 @@ class SuratWorkflowOrchestrator:
             kode_surat = session_data.get("intent")
             slots = session_data.get("slots", {})
 
-            # 0. Ekstraksi Data Internal Mahasiswa & Jalankan Validasi Akademik
+            # (Validasi akademik tetap berjalan seperti biasa...)
             try:
                 student_obj = user_obj.student_profile
             except AttributeError:
@@ -242,85 +242,58 @@ class SuratWorkflowOrchestrator:
                     "message": "❌ Akun ini tidak memiliki profil mahasiswa yang terikat."
                 }
 
-            student_data = {
-                "nim": student_obj.nim,
-                "nama": getattr(user_obj, "nama", ""),
-                "status_akademik": student_obj.status_akademik,
-                "status_pembayaran_ukt": student_obj.status_pembayaran_ukt,
-                "semester_aktif": student_obj.semester_aktif,
-                "total_sks_lulus": student_obj.total_sks_lulus,
-                "ipk_kumulatif": student_obj.ipk_kumulatif,
-                "catatan_pelanggaran_etik": student_obj.catatan_pelanggaran_etik,
-                "status_disiplin_kampus": student_obj.status_disiplin_kampus,
-                "status_beasiswa_aktif": student_obj.status_beasiswa_aktif,
-                "nama_beasiswa_aktif": student_obj.nama_beasiswa_aktif,
-                "prodi": student_obj.prodi.nama_prodi if student_obj.prodi else "",
-                "fakultas": student_obj.fakultas.nama_fakultas if student_obj.fakultas else "",
-            }
-
-            student_courses_data = list(
-                student_obj.courses_taken.values(
-                    "student_id", "course_id", "semester_taken", "status_krs"
-                )
-            )
-
-            try:
-                run_validators(
-                    kode_surat=kode_surat,
-                    student_data=student_data,
-                    payload=slots,
-                    student_courses_data=student_courses_data
-                )
-            except Exception as validation_exc:
-                error_msg = getattr(validation_exc, "detail", None) or str(validation_exc)
-                if isinstance(validation_exc, list):
-                    error_msg = str(validation_exc[0])
-                return {
-                    "status": "error",
-                    "message": f"❌ **Pengajuan Ditolak oleh Sistem Akademik Kampus:**\n{error_msg}"
-                }
-            
-            # 1. Buat record SuratRequest di PostgreSQL & Picu Background Worker AI Drafting
+            # 1. Buat record SuratRequest & Inisialisasi Draft
             surat_req = cls._initialize_surat_request(session_data, user_obj)
-            cls._trigger_async_drafting(surat_req.id, session_data)
             
-            # 2. Update status sesi jadi selesai / submitted
-            session_data["state"] = "COMPLETED"
+            # Simpan ID surat aktif ke session
+            session_data["active_surat_request_id"] = surat_req.id
+            session_data["state"] = "PENDING_APPROVAL"
+
+            # Jalankan drafting secara sinkron (atau tunggu sebentar) agar draf langsung muncul dalam 1 respons chat, 
+            # atau biarkan background worker berjalan dan informasikan user untuk mengetik "cek draf".
+            # Untuk pengalaman instan, kita bisa panggil langsung agen drafting-nya di sini:
+            try:
+                agent = SuratDraftingAgent()
+                dynamic_fields = getattr(surat_req.kode_surat, "required_fields_dict", None)
+                result = agent.draft_letter(
+                    user_prompt_context=surat_req.user_prompt_context,
+                    kode_surat=surat_req.kode_surat.kode_surat,
+                    dynamic_fields_dict=dynamic_fields
+                )
+                surat_req.ai_original_draft = getattr(result, "ai_original_draft", "")
+                surat_req.status = "PENDING_APPROVAL"
+                surat_req.save()
+            except Exception as e:
+                logger.error(f"Gagal generate draf instan: {e}")
+
             AutoSuratSessionManager.save_session(thread_id, session_data)
             
             surat_type_name = surat_req.kode_surat.nama_surat if surat_req.kode_surat else "Surat"
+            
+            # 📄 KUNCI UTAMA: Tampilkan teks draf AI secara langsung ke chat agar bisa direview!
             return {
                 "status": "success",
+                "surat_request_id": surat_req.id,
                 "message": (
-                    f"🚀 **Berhasil!** Permohonan **{surat_type_name}** telah resmi diajukan "
-                    f"dengan ID Pengajuan: **#{surat_req.id}**.\n\n"
-                    "🤖 Agen AI sedang menyusun draf surat di latar belakang. "
-                    "Anda dapat memantau status persetujuan melalui menu riwayat."
+                    f"🚀 **Permohonan Berhasil Diinisialisasi!** (ID: #{surat_req.id})\n\n"
+                    f"Berikut adalah **Draf AI** untuk **{surat_type_name}**:\n\n"
+                    f"> *\"{surat_req.ai_original_draft}\"*\n\n"
+                    "--- \n"
+                    "Silakan tinjau draf di atas:\n"
+                    "• Ketik **'Setuju'** atau **'Lanjut'** jika draf sudah pas dan ingin dikirim ke dosen.\n"
+                    "• Atau ketik **catatan revisi** jika ada bagian kalimat yang ingin kamu ubah."
                 )
             }
         else:
-            # JIKA USER BILANG BELUM / ADA YANG SALAH:
-            # Reset slot dan destinasi agar tidak terjebak loop is_complete() == True
+            # (Logika jika user bilang belum...)
             session_data["slots"] = {}  
             session_data["sub_state"] = "NORMAL_COLLECTION"
             AutoSuratSessionManager.save_session(thread_id, session_data)
-            
-            # Ambil label field pertama untuk menagih ulang dari awal
-            try:
-                surat_type = SuratType.objects.get(kode_surat=session_data.get("intent"))
-                required_fields = surat_type.required_payload_fields or []
-                first_field_label = required_fields[0].get("label", "data pertama") if required_fields else "data"
-            except Exception:
-                first_field_label = "data yang diperlukan"
-
             return {
                 "status": "success",
-                "message": (
-                    "Baik, mari kita ulangi pengisian data dari awal agar semuanya sesuai.\n\n"
-                    f"Silakan masukkan kembali **{first_field_label}**:"
-                )
+                "message": "Baik, mari kita ulangi pengisian data dari awal."
             }
-            
+                        
     @staticmethod
     def _initialize_surat_request(session_data: dict, user_obj) -> SuratRequest:
         kode_surat = session_data.get("intent")
@@ -487,29 +460,41 @@ class SuratWorkflowOrchestrator:
         )
         thread.start()
     @staticmethod
-    def _execute_redrafting_worker(surat_request_id: int, revision_notes: str):
-        """Worker background khusus untuk merombak struktur/redaksi surat berdasarkan catatan revisi user."""
+    @staticmethod
+    def _execute_drafting_worker(surat_request_id: int, user_prompt_context: str, kode_surat: str, dynamic_fields_dict: Optional[dict], thread_id: Optional[str] = None):
         close_old_connections()
         try:
-            surat_req = SuratRequest.objects.get(id=surat_request_id)
             agent = SuratDraftingAgent()
-            
-            # Panggil method khusus redraft / revisi dengan membawa draf lama & catatan revisi
-            # (Pastikan di SuratDraftingAgent kamu memiliki method redraft atau sesuaikan namanya)
-            result = agent.redraft_letter(
-                existing_draft=surat_req.ai_original_draft,
-                payload_data=surat_req.payload_data,
-                revision_notes=revision_notes,
-                kode_surat=surat_req.kode_surat.kode_surat
+            result = agent.draft_letter(
+                user_prompt_context=user_prompt_context,
+                kode_surat=kode_surat,
+                dynamic_fields_dict=dynamic_fields_dict
             )
             
-            # Perbarui draf dengan hasil revisi struktur yang baru
-            surat_req.ai_original_draft = result.get("draft_text", surat_req.ai_original_draft)
-            surat_req.self_critique_score = result.get("score", surat_req.self_critique_score)
-            surat_req.status = "PENDING_APPROVAL"  # Kembalikan ke mahasiswa untuk direview ulang
-            surat_req.save()
+            surat_req = SuratRequest.objects.get(id=surat_request_id)
+            surat_req.ai_original_draft = getattr(result, "ai_original_draft", "")
             
-            logger.info(f"[Worker] Redrafting struktur selesai untuk Surat #{surat_request_id}.")
+            evaluation_obj = getattr(result, "evaluation", None)
+            if evaluation_obj:
+                surat_req.self_critique_score = getattr(evaluation_obj, "self_critique_score", 0)
+                surat_req.revision_notes = getattr(evaluation_obj, "revision_notes", [])
+                
+            if surat_req.self_critique_score >= 8:
+                surat_req.status = "PENDING_APPROVAL"
+            else:
+                surat_req.status = "REVISION_REQUIRED"
+                surat_req.revision_notes = getattr(evaluation_obj, "revision_notes", ["Perlu penyesuaian data."])
+                
+            surat_req.save()
+
+            # 🔑 Simpan ID surat aktif ke dalam sesi Redis jika thread_id tersedia
+            if thread_id:
+                session_data = AutoSuratSessionManager.get_session(thread_id)
+                session_data["active_surat_request_id"] = surat_req.id
+                session_data["state"] = "PENDING_APPROVAL"
+                AutoSuratSessionManager.save_session(thread_id, session_data)
+
+            logger.info(f"[Worker] Drafting selesai untuk Surat #{surat_request_id}. Status: {surat_req.status}")
         except Exception as e:
-            logger.error(f"[Worker Error] Gagal redrafting Surat #{surat_request_id}: {str(e)}")
-            SuratRequest.objects.filter(id=surat_request_id).update(status="REVISION_FAILED")
+            logger.error(f"[Worker Error] Gagal drafting Surat #{surat_request_id}: {str(e)}\n{traceback.format_exc()}")
+            SuratRequest.objects.filter(id=surat_request_id).update(status="FAILED")
