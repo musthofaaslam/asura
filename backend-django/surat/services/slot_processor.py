@@ -62,8 +62,7 @@ def handle_destination_address_input(user_message: str, session_data: dict, curr
     address = user_message.strip()
     current_slots["target_destination_address"] = address
     session_data["slots"] = current_slots
-    
-    from .session_manager import AutoSuratSessionManager
+
     # Ubah sub_state ke konfirmasi akhir, serahkan kontrol tampilan ke orkestrator
     session_data["sub_state"] = "WAITING_SLOT_CONFIRMATION"
     AutoSuratSessionManager.save_session(thread_id, session_data)
