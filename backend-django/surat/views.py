@@ -954,11 +954,23 @@ class SuratVerifyAPIView(APIView):
 
 from .services.surat_orchestrator import SuratWorkflowOrchestrator
 from surat.services.validators import run_validators
-
+import json
 class AutoSuratChatAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
+        # pengamanan tambahan: pastikan user memiliki profil mahasiswa
+        raw_data = request.data
+        if isinstance(raw_data, str):
+            try:
+                data = json.loads(raw_data)
+            except json.JSONDecodeError:
+                data = {}
+        elif isinstance(raw_data, dict):
+            data = raw_data
+        else:
+            data = {}
+        
         # 1. Ambil payload dari frontend
         thread_id = request.data.get("thread_id")  # Bisa None/kosong untuk New Chat
         user_message = request.data.get("message", "").strip()
@@ -1037,9 +1049,6 @@ class AutoSuratChatAPIView(APIView):
                 user_message=user_message,
                 user_obj=request.user
             )
-
-            # 5. Kembalikan hasil proses ke frontend
-            return Response(result, status=status.HTTP_200_OK)
 
             # 5. Kembalikan hasil proses ke frontend
             return Response(result, status=status.HTTP_200_OK)

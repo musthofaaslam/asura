@@ -9,6 +9,7 @@ from .route_intent import route_intent_with_ai
 from surat.models import SuratType, SuratRequest, ChatThread
 from .slot_processor import handle_switch_confirmation_redis, process_slot_filling_redis
 from surat.services.validators import run_validators
+from surat.models import ChatThread, ChatMessage
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +25,16 @@ class SuratWorkflowOrchestrator:
         # 1. Tangani Lazy Initialization jika thread_id kosong/null
         from .session_manager import AutoSuratSessionManager
         if not thread_id:
-                new_thread = AutoSuratSessionManager.initialize_thread(user_obj, initial_title=user_message[:30])
-                thread_id = str(new_thread.id)
-
+            new_thread = AutoSuratSessionManager.initialize_thread(user_obj, initial_title=user_message[:30])
+            thread_id = str(new_thread.id)
+        else:
+            # Pastikan thread benar milik user yang aktif
+            thread = ChatThread.objects.filter(id=thread_id, user=user_obj).first()
+            if not thread:
+                return {
+                    "status": "error",
+                    "message": "Sesi chat atau thread tidak ditemukan, atau Anda tidak memiliki hak akses."
+                }
         # 2. Ambil sesi dari Redis
         session_data = AutoSuratSessionManager.get_session(thread_id, user_obj)
         state = session_data.get("state", "ACTIVE")
@@ -38,6 +46,27 @@ class SuratWorkflowOrchestrator:
         if state in ["EXPIRED", "CANCELLED", "NOT_FOUND"]:
             return cls._handle_invalid_session(thread_id, state)
 
+        try:
+            thread_obj = ChatThread.objects.filter(id=thread_id).first()
+            if thread_obj:
+                ChatMessage.objects.create(
+                    thread=thread_obj,
+                    sender=ChatMessage.SenderType.USER,
+                    message=user_message
+                )
+        except Exception as db_exc:
+            logger.error("Gagal mencatat pesan user ke database ChatMessage: %s", db_exc)
+
+        # 5. Interceptor Global: Cek kata kunci pembatalan cepat
+        if user_message.lower().strip() in ["batal", "cancel", "reset", "stop"]:
+            AutoSuratSessionManager.clear_session(thread_id, target_status="CANCELLED")
+            return {
+                "status": "success",
+                "state": "CANCELLED",
+                "thread_id": thread_id,
+                "message": "Sesi permohonan surat telah dibatalkan. Ketik pesan baru jika ingin memulai lagi."
+            }
+            
         # 4. ROUTING BERDASARKAN SUB-STATE & MAIN STATE
         response_result = {}
 

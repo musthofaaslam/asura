@@ -1,10 +1,8 @@
 import json
 import logging
-import copy
 from typing import Dict, Any, Optional
 from django.core.cache import cache
-from surat.models import ChatThread, ChatMessage
-from surat.services.surat_orchestrator import SuratWorkflowOrchestrator
+from surat.models import ChatThread
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +29,7 @@ class AutoSuratSessionManager:
             "state": "ACTIVE",
             "intent": None,
             "pending_intent": None,
-            "sub_state": "NORMAL_COLLECTION",
+            "sub_state": "WAITING_FOR_INTENT",  # Diselaraskan dengan awal orkestrator
             "is_waiting_for_switch_confirmation": False,
             "slots": {},
             "missing_slots": []
@@ -111,66 +109,3 @@ class AutoSuratSessionManager:
         redis_key = cls._get_redis_key(thread_id)
         cache.delete(redis_key)
         ChatThread.objects.filter(id=thread_id).update(status=target_status)
-
-    @classmethod
-    def handle_incoming_message(cls, thread_id: Optional[str], user_message: str, user_obj) -> tuple[str, str]:
-        """
-        Handler utama dengan dukungan Lazy Initialization & Pengamanan Sesi Expired/Cancelled:
-        1. Menangani Lazy Initialization jika thread_id kosong/null/baru.
-        2. Cek status sesi (ACTIVE, EXPIRED, CANCELLED, NOT_FOUND).
-        3. Interceptor Keyword Pembatalan Global.
-        4. Pencatatan riwayat & eksekusi orkestrator.
-        
-        Returns:
-            tuple: (reply_message, active_thread_id)
-        """
-        cleaned_msg = user_message.strip()
-        cleaned_msg_lower = cleaned_msg.lower()
-
-        # --- FITUR LAZY INITIALIZATION ---
-        if not thread_id:
-            new_thread = cls.initialize_thread(user_obj, initial_title=cleaned_msg[:30] + "...")
-            thread_id = str(new_thread.id)
-
-        session_data = cls.get_session(thread_id, user_obj)
-        current_state = session_data.get("state")
-
-        # --- PENGAWASAN SESI EXPIRED / CANCELLED / NOT_FOUND ---
-        if current_state in ["EXPIRED", "CANCELLED", "NOT_FOUND"]:
-            if current_state == "EXPIRED":
-                msg = "[SESSION_EXPIRED] Sesi Anda telah kedaluwarsa karena tidak ada aktivitas selama 30 menit. Silakan buat percakapan baru (New Chat) untuk melanjutkan."
-            elif current_state == "CANCELLED":
-                msg = "[SESSION_CANCELLED] Sesi permohonan surat ini telah dibatalkan. Silakan buat percakapan baru (New Chat) jika ingin mulai kembali."
-            else:
-                msg = "[THREAD_NOT_FOUND] Sesi percakapan tidak ditemukan. Silakan buat percakapan baru."
-            
-            return msg, thread_id
-
-        # 1. Interceptor Keyword Pembatalan Global
-        cancellation_keywords = ["batal", "reset", "cancel", "mulai ulang", "stop", "hentikan", "hapus"]
-        if cleaned_msg_lower in cancellation_keywords:
-            cls.clear_session(thread_id, target_status=ChatThread.ThreadStatus.CANCELLED)
-            ChatThread.objects.filter(id=thread_id).update(
-                document_type=None, 
-                title="Permohonan Surat Dibatalkan"
-            )
-            return "[SESSION_CANCELLED] Sesi permohonan surat ini telah dibatalkan. Silakan buat percakapan baru (New Chat) jika ingin mulai kembali.", thread_id
-
-        # 2. Log pesan masuk ke PostgreSQL
-        thread = ChatThread.objects.filter(id=thread_id, user=user_obj).first()
-        if thread:
-            ChatMessage.objects.create(
-                thread=thread,
-                sender='user',
-                message=user_message,
-                slots_snapshot=copy.deepcopy(session_data.get("slots", {}))
-            )
-
-        # 3. Teruskan ke orkestrator logika alur chat
-        orchestrator_result = SuratWorkflowOrchestrator.process_incoming_chat(thread_id, cleaned_msg, user_obj)
-        reply_message = orchestrator_result.get("message", "")
-        
-        # 4. Simpan kembali pembaruan state session_data ke Redis Cache (Sliding TTL)
-        cache.set(cls._get_redis_key(thread_id), session_data, timeout=cls.TTL_SECONDS)
-
-        return reply_message, thread_id
