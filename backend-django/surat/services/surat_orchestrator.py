@@ -51,7 +51,7 @@ class SuratWorkflowOrchestrator:
             if thread_obj:
                 ChatMessage.objects.create(
                     thread=thread_obj,
-                    sender=ChatMessage.SenderType.USER,
+                    sender_type=ChatMessage.SenderType.USER,
                     message=user_message
                 )
         except Exception as db_exc:
