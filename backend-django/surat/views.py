@@ -1049,6 +1049,27 @@ class AutoSuratChatAPIView(APIView):
                 user_message=user_message,
                 user_obj=request.user
             )
+            
+            # 4. AMBIL THREAD_ID & CATAT KE DATABASE (ChatMessage)
+            resolved_thread_id = result.get("thread_id")
+            ai_message_text = result.get("message", "")
+
+            if resolved_thread_id:
+                thread_obj = ChatThread.objects.filter(id=resolved_thread_id).first()
+                if thread_obj:
+                    # Simpan pesan dari Mahasiswa
+                    ChatMessage.objects.create(
+                        thread=thread_obj,
+                        sender_type=ChatMessage.SenderType.USER,
+                        message=user_message
+                    )
+                    # Simpan balasan dari Asisten AI
+                    if ai_message_text:
+                        ChatMessage.objects.create(
+                            thread=thread_obj,
+                            sender_type=ChatMessage.SenderType.AI,  # Sesuaikan dengan enum modelmu (AI / ASSISTANT)
+                            message=ai_message_text
+                        )
 
             # 5. Kembalikan hasil proses ke frontend
             return Response(result, status=status.HTTP_200_OK)
