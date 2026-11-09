@@ -20,23 +20,27 @@ def detect_intent_dynamically(user_message: str) -> str | None:
         if re.search(pattern, message_lower):
             return kode
 
+    if re.search(r'\bsr-mag\b', message_lower):
+        return 'SR-MAG'
+    if re.search(r'\bsr-bea\b', message_lower):
+        return 'SR-BEA'
     # 2. Ambil semua jenis surat dari database (Supabase)
-    surat_types = SuratType.objects.all()
+    # surat_types = SuratType.objects.all()
     
-    for surat in surat_types:
-        nama_surat_lower = surat.nama_surat.lower()
+    # for surat in surat_types:
+    #     nama_surat_lower = surat.nama_surat.lower()
         
-        # Ekstraksi kata penting (turunkan batas jadi > 2 agar kata seperti 'pos' atau singkatan lain tertangkap jika ada)
-        keywords = [kw for kw in re.findall(r'\w+', nama_surat_lower) if len(kw) > 2]
+    #     # Ekstraksi kata penting (turunkan batas jadi > 2 agar kata seperti 'pos' atau singkatan lain tertangkap jika ada)
+    #     keywords = [kw for kw in re.findall(r'\w+', nama_surat_lower) if len(kw) > 2]
         
-        # Cek apakah ada keyword dari nama surat yang muncul di chat user
-        for kw in keywords:
-            if re.search(r'\b' + re.escape(kw) + r'\b', message_lower):
-                return surat.kode_surat
+    #     # Cek apakah ada keyword dari nama surat yang muncul di chat user
+    #     for kw in keywords:
+    #         if re.search(r'\b' + re.escape(kw) + r'\b', message_lower):
+    #             return surat.kode_surat
                 
-        # Cek langsung berdasarkan kode surat jika user mengetiknya secara spesifik (misal: "SI-MAG")
-        if surat.kode_surat.lower() in message_lower:
-            return surat.kode_surat
+    #     # Cek langsung berdasarkan kode surat jika user mengetiknya secara spesifik (misal: "SI-MAG")
+    #     if surat.kode_surat.lower() in message_lower:
+    #         return surat.kode_surat
 
     # Jika tidak ada keyword yang cocok, kembalikan None (lanjut ke AI Router / Pydantic)
     return None
