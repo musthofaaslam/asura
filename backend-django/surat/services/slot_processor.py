@@ -120,37 +120,49 @@ def process_slot_filling_redis(user_message: str, session_data: dict) -> str:
     if slot_mgr.is_complete():
         return handle_destination_selection(user_message, session_data, current_slots, thread_id)
 
-    # Ambil slot lama secara kumulatif
+    # 1. Ambil slot saat ini dari sesi
     existing_slots = dict(current_slots)
 
-    # Cari field wajib pertama yang masih kosong secara berurutan
+    # 2. Inisialisasi manager dengan slot terkini
+    slot_mgr = SlotMemoryManager(
+        kode_surat=surat_type.kode_surat,
+        required_fields=required_fields,
+        initial_slots=existing_slots
+    )
+
+    # 3. Cari field wajib pertama yang masih kosong
     missing_fields = slot_mgr.get_missing_fields(existing_slots)
     
     if missing_fields and user_message.strip():
         target_field_obj = missing_fields[0]
         target_field_key = target_field_obj.get("field")
 
-        # 🔑 MURNI MANUAL / DETERMINISTIK:
-        # Pesan dari user langsung dimasukkan ke field kosong urutan pertama secara pasti.
+        # Masukkan input user ke field kosong urutan pertama tersebut
         cleaned_val = sanitize_extracted_slot(target_field_key, user_message)
         existing_slots[target_field_key] = cleaned_val
 
-    # Simpan kembali ke slot manager dan session Redis
-    slot_mgr.accumulated_slots = existing_slots
+    # 4. 🔑 SIMPAN KE SESSION & REDIS SECARA EKSPLISIT
     session_data["slots"] = existing_slots
-
+    
     if thread_id:
         AutoSuratSessionManager.save_session(thread_id, session_data)
 
-    # Periksa apakah setelah pengisian ini slot sudah lengkap 100%
-    if slot_mgr.is_complete(existing_slots):
+    # 5. Inisialisasi ulang manager dengan data `existing_slots` terbaru 
+    # untuk mengecek apakah sudah 100% lengkap atau bergeser ke field berikutnya
+    updated_slot_mgr = SlotMemoryManager(
+        kode_surat=surat_type.kode_surat,
+        required_fields=required_fields,
+        initial_slots=existing_slots
+    )
+
+    if updated_slot_mgr.is_complete(existing_slots):
         return handle_destination_selection(user_message, session_data, existing_slots, thread_id)
 
-    # Buat respons status checklist & menagih field kosong berikutnya
+    # 6. Buat checklist status berdasarkan `existing_slots` yang sudah terupdate
     checklist_lines, _, _ = generate_checklist_status_response(surat_type, existing_slots)
     formatted_checklist = "\n".join(checklist_lines)
     
-    updated_missing = slot_mgr.get_missing_fields(existing_slots)
+    updated_missing = updated_slot_mgr.get_missing_fields(existing_slots)
     next_target_prompt = "Mohon lengkapi atribut berikutnya."
     if updated_missing:
         next_field = updated_missing[0]
@@ -160,7 +172,6 @@ def process_slot_filling_redis(user_message: str, session_data: dict) -> str:
         next_target_prompt = f"👉 Atribut '{field_label}' ({next_field.get('field')}) belum disebutkan.{desc_str}"
 
     return f"{formatted_checklist}\n\n{next_target_prompt}"
-
 
 def generate_checklist_status_response(surat_type, current_slots: dict):
     required_fields = surat_type.required_payload_fields or []
