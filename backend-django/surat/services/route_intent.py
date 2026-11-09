@@ -22,11 +22,15 @@ def route_intent_with_ai(user_message: str) -> str | None:
     client = genai.Client() # Inisialisasi client LLM
     
     prompt = f"""
-    Analisis pesan dari mahasiswa berikut dan tentukan jenis surat apa yang mereka inginkan.
+    Analisis pesan dari mahasiswa berikut dan tentukan apakah pesan tersebut secara spesifik meminta pembuatan dokumen:
+    1. "SR-MAG" (untuk Surat Rekomendasi Pkl, Praktik Kerja Lapangan, Kerja Praktek, Internship, Magang, MBKM)
+    2. "SR-BEA" (untuk Surat Rekomendasi Beasiswa, sponsorship, atau bantuan dana)
+
     Pesan User: "{user_message}"
-    
-    Pilih HANYA dari daftar kode surat yang tersedia pada skema yang ditentukan. 
-    Jika kalimat user sama sekali tidak jelas atau bukan permohonan surat, set nilai kode_surat menjadi null.
+
+    Aturan Ketat:
+    - Pilih HANYA salah satu dari enum yang tersedia jika maksudnya jelas mengarah ke magang atau beasiswa.
+    - Jika pesan bersifat umum, menanyakan hal lain (misal: transkrip nilai, jadwal, sponsor dana di luar beasiswa formal, atau curhat biasa), atau sama sekali tidak jelas, WAJIB set nilai kode_surat menjadi null. Jangan dipaksa-paksakan!
     """
 
     try:
