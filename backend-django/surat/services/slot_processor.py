@@ -44,7 +44,6 @@ def handle_destination_type_selection(user_message: str, session_data: dict, cur
     if "email" in msg_lower:
         current_slots["chosen_destination"] = "email"
         session_data["slots"] = current_slots
-        # 🔑 WAJIB SIMPAN KE REDIS AGAR TIDAK HILANG
         if thread_id:
             AutoSuratSessionManager.save_session(thread_id, session_data)
         return "Baik, terpilih **Email**. Mohon masukkan alamat email tujuan Anda saat ini:"
@@ -52,7 +51,6 @@ def handle_destination_type_selection(user_message: str, session_data: dict, cur
     elif "telegram" in msg_lower:
         current_slots["chosen_destination"] = "telegram"
         session_data["slots"] = current_slots
-        # 🔑 WAJIB SIMPAN KE REDIS AGAR TIDAK HILANG
         if thread_id:
             AutoSuratSessionManager.save_session(thread_id, session_data)
         return "Baik, terpilih **Telegram**. Mohon masukkan nomor **Chat ID Telegram** Anda:"
@@ -72,7 +70,6 @@ def handle_destination_selection(user_message: str, session_data: dict, current_
     if not current_slots.get("target_destination_address"):
         return handle_destination_address_input(user_message, session_data, current_slots, thread_id)
     
-    # 🔑 JIKA KEDUANYA SUDAH TERISI, PASTIKAN SUB_STATE TERKUNCI KE KONFIRMASI AKHIR
     session_data["sub_state"] = "WAITING_SLOT_CONFIRMATION"
     if thread_id:
         AutoSuratSessionManager.save_session(thread_id, session_data)
@@ -89,11 +86,9 @@ def handle_destination_address_input(user_message: str, session_data: dict, curr
     current_slots["target_destination_address"] = address
     session_data["slots"] = current_slots
 
-    # Ubah sub_state ke konfirmasi akhir, serahkan kontrol tampilan ke orkestrator
     session_data["sub_state"] = "WAITING_SLOT_CONFIRMATION"
     AutoSuratSessionManager.save_session(thread_id, session_data)
     
-    # Buat ringkasan lengkap untuk ditampilkan di pesan konfirmasi
     summary_str = "\n".join([f"- **{k}**: {v}" for k, v in current_slots.items()])
     
     return (
@@ -102,8 +97,9 @@ def handle_destination_address_input(user_message: str, session_data: dict, curr
         f"✨ *Apakah data di atas sudah benar dan siap dibuatkan draf suratnya? (Jawab: **Ya** / **Belum**)*"
     )
 
+
 def process_slot_filling_redis(user_message: str, session_data: dict) -> str:
-    """Ekstraksi slot bebas, sanitasi regex, dan pengecekan kelengkapan secara kumulatif[cite: 1]."""
+    """Pendekatan Murni Deterministik: Berbasis Urutan Indeks (Sequential), Aman & Cepat[cite: 1]."""
     try:
         surat_type = SuratType.objects.get(kode_surat=session_data.get("intent"))
     except SuratType.DoesNotExist:
@@ -120,73 +116,51 @@ def process_slot_filling_redis(user_message: str, session_data: dict) -> str:
 
     thread_id = session_data.get("thread_id") or ""
 
-    # Jika slot utama sudah lengkap, lanjut ke pengisian destinasi
+    # Jika slot utama sudah lengkap, langsung lanjut ke pengisian destinasi
     if slot_mgr.is_complete():
         return handle_destination_selection(user_message, session_data, current_slots, thread_id)
 
-    # 1. Buat salinan slot yang sudah ada agar bersifat kumulatif (tidak tertimpa)
+    # Ambil slot lama secara kumulatif
     existing_slots = dict(current_slots)
 
-    # 2. Ekstraksi slot menggunakan AI / Extractor
-    extracted_data = {}
-    try:
-        from surat.agents.letter_agent import SuratDraftingAgent
-        agent = SuratDraftingAgent()
-        extraction_result = agent.extract_slots_from_text(
-            user_prompt_context=user_message,
-            kode_surat=surat_type.kode_surat,
-            required_fields=required_fields,
-            current_slots=existing_slots
-        )
-        extracted_data = getattr(extraction_result, "extracted_slots", {}) or {}
-    except Exception:
-        pass
+    # Cari field wajib pertama yang masih kosong secara berurutan
+    missing_fields = slot_mgr.get_missing_fields(existing_slots)
+    
+    if missing_fields and user_message.strip():
+        target_field_obj = missing_fields[0]
+        target_field_key = target_field_obj.get("field")
 
-    # 3. Sanitasi dan masukkan data hasil ekstraksi ke existing_slots secara aman
-    for field_key, raw_val in extracted_data.items():
-        if is_value_filled(raw_val):
-            cleaned_val = sanitize_extracted_slot(field_key, raw_val)
-            existing_slots[field_key] = cleaned_val
+        # 🔑 MURNI MANUAL / DETERMINISTIK:
+        # Pesan dari user langsung dimasukkan ke field kosong urutan pertama secara pasti.
+        cleaned_val = sanitize_extracted_slot(target_field_key, user_message)
+        existing_slots[target_field_key] = cleaned_val
 
-    # 4. Fallback: Jika AI tidak mengekstrak apa pun, masukkan pesan user ke field kosong pertama yang wajib
-    if not extracted_data and user_message.strip():
-        temp_mgr = SlotMemoryManager(
-            kode_surat=surat_type.kode_surat,
-            required_fields=required_fields,
-            initial_slots=existing_slots
-        )
-        missing = temp_mgr.get_missing_fields(existing_slots)
-        if missing:
-            first_missing_key = missing[0].get("field")
-            existing_slots[first_missing_key] = sanitize_extracted_slot(first_missing_key, user_message)
-
-    # 5. Perbarui slot manager dan simpan ke session session_data
+    # Simpan kembali ke slot manager dan session Redis
     slot_mgr.accumulated_slots = existing_slots
     session_data["slots"] = existing_slots
 
-    # 🔑 SIMPAN PERMANEN KE REDIS AGAR TIDAK HILANG
     if thread_id:
         AutoSuratSessionManager.save_session(thread_id, session_data)
 
-    # 6. Periksa kembali apakah setelah digabungkan slot sudah lengkap 100%
+    # Periksa apakah setelah pengisian ini slot sudah lengkap 100%
     if slot_mgr.is_complete(existing_slots):
         return handle_destination_selection(user_message, session_data, existing_slots, thread_id)
 
-    # 7. Buat respons status checklist & pertanyaan slot berikutnya
+    # Buat respons status checklist & menagih field kosong berikutnya
     checklist_lines, _, _ = generate_checklist_status_response(surat_type, existing_slots)
     formatted_checklist = "\n".join(checklist_lines)
     
-    missing_notes = slot_mgr.get_missing_fields(existing_slots)
-    # Cari note klarifikasi berdasarkan field yang masih kosong
-    next_target_prompt = f"Mohon lengkapi atribut berikutnya."
-    if missing_notes:
-        next_field = missing_notes[0]
+    updated_missing = slot_mgr.get_missing_fields(existing_slots)
+    next_target_prompt = "Mohon lengkapi atribut berikutnya."
+    if updated_missing:
+        next_field = updated_missing[0]
         field_label = next_field.get("label", next_field.get("field"))
         field_desc = next_field.get("description", "")
         desc_str = f" Keterangan: {field_desc}." if field_desc else ""
         next_target_prompt = f"👉 Atribut '{field_label}' ({next_field.get('field')}) belum disebutkan.{desc_str}"
 
     return f"{formatted_checklist}\n\n{next_target_prompt}"
+
 
 def generate_checklist_status_response(surat_type, current_slots: dict):
     required_fields = surat_type.required_payload_fields or []
@@ -224,20 +198,15 @@ def sanitize_extracted_slot(field_name: str, raw_value: Any) -> Any:
 
     text = raw_value.strip()
     
-    # Pembersihan awalan kata sambung yang sering ikut terekstraksi
     if field_name == "instansi_tujuan":
         text = re.sub(r'^(untuk|ke|pada|kepada|di)\s+', '', text, flags=re.IGNORECASE).strip()
-        # Merapikan kapitalisasi nama instansi secara elegan (Title Case) jika bentuknya huruf kecil semua
         if text.islower() or text.isupper():
             text = text.title()
-            # Perbaikan kecil untuk singkatan umum seperti PT, CV, dll. agar tetap rapi
             text = re.sub(r'\bPt\b', 'PT', text)
             text = re.sub(r'\bCv\b', 'CV', text)
             text = re.sub(r'\bUd\b', 'UD', text)
 
-    # Bersihkan tanda kutip, backtick, atau titik di akhir kalimat
     text = text.strip('"\'`')
     text = re.sub(r'[.\s]+$', '', text)
     
     return text
-
