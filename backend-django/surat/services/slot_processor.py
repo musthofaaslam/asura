@@ -1,7 +1,10 @@
 import re
+import logging
 from typing import Dict, Any
 from surat.models import SuratType
 from surat.agents.slot_memory import SlotMemoryManager, is_value_filled
+
+logger = logging.getLogger(__name__)
 
 def handle_switch_confirmation_redis(user_message: str, thread_id: str, session_data: dict, thread_obj) -> str:
     """Menangani konfirmasi saat mahasiswa ingin beralih jenis surat di tengah jalan[cite: 1]."""
@@ -117,10 +120,12 @@ def process_slot_filling_redis(user_message: str, session_data: dict) -> str:
         )
         extracted_data = getattr(extraction_result, "extracted_slots", {}) or {}
     except Exception:
-        missing = slot_mgr.get_missing_fields()
-        if missing:
-            first_missing_key = missing[0].get("field")
-            extracted_data = {first_missing_key: user_message}
+        # missing = slot_mgr.get_missing_fields()
+        # if missing:
+        #     first_missing_key = missing[0].get("field")
+        #     extracted_data = {first_missing_key: user_message}
+        logger.warning(f"Gagal mengekstrak slot dari teks: {logging.exception}. Menggunakan fallback heuristik.")
+        extracted_data = {}
 
     # Sanitasi data hasil ekstraksi
     cleaned_extracted_data = {}
