@@ -99,6 +99,7 @@ class SuratWorkflowOrchestrator:
 
         return response_result
     
+    @classmethod
     def _handle_invalid_session(cls, thread_id: str, state: str) -> Dict[str, Any]:
         if state == "EXPIRED":
             return {
