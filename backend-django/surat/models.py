@@ -219,9 +219,20 @@ class ChatThread(models.Model):
         ]
 
 class ChatMessage(models.Model):
-    """Menyimpan riwayat pesan di setiap thread untuk keperluan history & LLM context."""
+    # TAMBAHKAN CLASS ENUM INI DI DALAM MODEL ChatMessage:
+    class SenderType(models.TextChoices):
+        USER = 'USER', 'User'
+        AI = 'AI', 'AI'
+        SYSTEM = 'SYSTEM', 'System'
+
     thread = models.ForeignKey(ChatThread, on_delete=models.CASCADE, related_name='messages')
-    sender = models.CharField(max_length=20) # 'user' atau 'assistant'
+    sender_type = models.CharField(
+        max_length=20, 
+        choices=SenderType.choices, 
+        default=SenderType.USER
+    )
     message = models.TextField()
-    slots_snapshot = models.JSONField(null=True, blank=True) # Snapshot slot saat pesan dikirim
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"[{self.sender_type}] {self.message[:30]}"
