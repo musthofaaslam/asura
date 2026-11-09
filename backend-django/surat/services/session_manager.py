@@ -76,33 +76,35 @@ class AutoSuratSessionManager:
         return session_data
     
     @classmethod
-    def save_session(
-        cls, 
-        thread_id: str, 
-        state: str, 
-        sub_state: Optional[str] = None,
-        intent: Optional[str] = None, 
-        slots: Optional[Dict[str, Any]] = None, 
-        missing_slots: Optional[list] = None,
-        pending_intent: Optional[str] = None,
-        is_waiting_for_switch_confirmation: Optional[bool] = None
-    ):
+    def save_session(cls, thread_id: str, session_data_or_state: Any, sub_state: Optional[str] = None, **kwargs):
         """Menyimpan atau memperbarui state ke Redis Cache dengan Sliding TTL 30 menit."""
         redis_key = cls._get_redis_key(thread_id)
         existing = cache.get(redis_key) or {}
         
-        updated_data = {
-            "state": state,
-            "intent": intent if intent is not None else existing.get("intent"),
-            "sub_state": sub_state if sub_state is not None else existing.get("sub_state", "NORMAL_COLLECTION"), 
-            "pending_intent": pending_intent if pending_intent is not None else existing.get("pending_intent"),
-            "is_waiting_for_switch_confirmation": is_waiting_for_switch_confirmation if is_waiting_for_switch_confirmation is not None else existing.get("is_waiting_for_switch_confirmation", False),
-            "slots": slots if slots is not None else existing.get("slots", {}),
-            "missing_slots": missing_slots if missing_slots is not None else existing.get("missing_slots", [])
-        }
+        # Jika argumen kedua berupa dictionary (langsung dari session_data orkestrator)
+        if isinstance(session_data_or_state, dict):
+            updated_data = {
+                "state": session_data_or_state.get("state", existing.get("state", "ACTIVE")),
+                "intent": session_data_or_state.get("intent", existing.get("intent")),
+                "sub_state": session_data_or_state.get("sub_state", existing.get("sub_state", "NORMAL_COLLECTION")),
+                "pending_intent": session_data_or_state.get("pending_intent", existing.get("pending_intent")),
+                "is_waiting_for_switch_confirmation": session_data_or_state.get("is_waiting_for_switch_confirmation", existing.get("is_waiting_for_switch_confirmation", False)),
+                "slots": session_data_or_state.get("slots", existing.get("slots", {})),
+                "missing_slots": session_data_or_state.get("missing_slots", existing.get("missing_slots", []))
+            }
+        else:
+            # Jika dipanggil secara parameter terpisah
+            updated_data = {
+                "state": session_data_or_state,
+                "intent": kwargs.get("intent", existing.get("intent")),
+                "sub_state": sub_state if sub_state is not None else existing.get("sub_state", "NORMAL_COLLECTION"),
+                "pending_intent": kwargs.get("pending_intent", existing.get("pending_intent")),
+                "is_waiting_for_switch_confirmation": kwargs.get("is_waiting_for_switch_confirmation", existing.get("is_waiting_for_switch_confirmation", False)),
+                "slots": kwargs.get("slots", existing.get("slots", {})),
+                "missing_slots": kwargs.get("missing_slots", existing.get("missing_slots", []))
+            }
 
         cache.set(redis_key, updated_data, timeout=cls.TTL_SECONDS)
-
     @classmethod
     def clear_session(cls, thread_id: str, target_status: str = ChatThread.ThreadStatus.CANCELLED):
         """Menghapus cache Redis dan mensinkronisasi status akhir ke PostgreSQL."""
