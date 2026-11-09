@@ -188,9 +188,7 @@ class SuratWorkflowOrchestrator:
 
         # 1. Cek apakah user sedang dalam proses konfirmasi switch intent (pindah surat)
         if session_data.get("is_waiting_for_switch_confirmation"):
-
             thread_obj = ChatThread.objects.filter(id=thread_id).first()
-            
             reply_msg = handle_switch_confirmation_redis(cleaned_msg, thread_id, session_data, thread_obj)
             AutoSuratSessionManager.save_session(thread_id, session_data)
             return {"status": "success", "message": reply_msg}
@@ -216,11 +214,14 @@ class SuratWorkflowOrchestrator:
                 )
             }
 
-        # 3. Jalankan fungsi utama slot filling dari chat_workflow.py (Ekstraksi, Sanitasi, & Pengecekan Kelengkapan)
+        # 3. Jalankan fungsi utama slot filling 
         reply_msg = process_slot_filling_redis(cleaned_msg, session_data)
         
+        # 🔑 WAJIB: Simpan kembali session_data yang sudah diperbarui ke Redis di tingkat orkestrator!
+        AutoSuratSessionManager.save_session(thread_id, session_data)
+        
         return {"status": "success", "message": reply_msg}
-
+    
     @classmethod
     def _handle_slot_confirmation_response(cls, thread_id: str, user_message: str, user_obj, session_data: dict) -> Dict[str, Any]:
         """Tahap Konfirmasi Akhir (Ya / Belum) sebelum AI Drafting dipicu."""
