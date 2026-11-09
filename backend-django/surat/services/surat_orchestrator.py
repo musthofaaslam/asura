@@ -1,5 +1,6 @@
 import logging
 import threading
+import traceback
 from typing import Dict, Any, Optional
 from django.db import close_old_connections
 
@@ -386,7 +387,7 @@ class SuratWorkflowOrchestrator:
             surat_req.save()
             logger.info(f"[Worker] Drafting selesai untuk Surat #{surat_request_id}. Status: {surat_req.status}")
         except Exception as e:
-            logger.error(f"[Worker Error] Gagal drafting Surat #{surat_request_id}: {str(e)}")
+            logger.error(f"[Worker Error] Gagal drafting Surat #{surat_request_id}: {str(e)}\n{traceback.format_exc()}")
             SuratRequest.objects.filter(id=surat_request_id).update(status="FAILED")
     
     @classmethod
