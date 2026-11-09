@@ -375,9 +375,12 @@ class SuratWorkflowOrchestrator:
             )
             
             surat_req = SuratRequest.objects.get(id=surat_request_id)
-            surat_req.ai_original_draft = result.get("draft_text", "")
-            surat_req.self_critique_score = result.get("score", 0)
-            
+            surat_req.ai_original_draft = getattr(result, "ai_original_draft", "")
+            # Ambil skor dari objek evaluasi di dalam schema
+            evaluation_obj = getattr(result, "evaluation", None)
+            if evaluation_obj:
+                surat_req.self_critique_score = getattr(evaluation_obj, "self_critique_score", 0)
+                surat_req.revision_notes = getattr(evaluation_obj, "revision_notes", [])
             if surat_req.self_critique_score >= 8:
                 surat_req.status = "PENDING_APPROVAL"
             else:
