@@ -3,7 +3,6 @@ import logging
 from typing import Dict, Any
 from surat.models import SuratType
 from surat.agents.slot_memory import SlotMemoryManager, is_value_filled
-from .session_manager import AutoSuratSessionManager
 
 
 logger = logging.getLogger(__name__)
@@ -139,7 +138,7 @@ def process_slot_filling_redis(user_message: str, session_data: dict) -> str:
     updated_slots = SlotMemoryManager.merge_slots(slot_mgr.accumulated_slots, cleaned_extracted_data)
     slot_mgr.accumulated_slots = updated_slots
     session_data["slots"] = updated_slots
-
+    from .session_manager import AutoSuratSessionManager
     # 🔑 FIX UTAMA: Simpan secara eksplisit ke Redis agar tidak ter-reset/looping
     if thread_id:
         AutoSuratSessionManager.save_session(thread_id, session_data)
