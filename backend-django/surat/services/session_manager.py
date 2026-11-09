@@ -1,5 +1,6 @@
 import json
 import logging
+import copy
 from typing import Dict, Any, Optional
 from django.core.cache import cache
 from surat.models import ChatThread
@@ -29,7 +30,7 @@ class AutoSuratSessionManager:
             "state": "ACTIVE",
             "intent": None,
             "pending_intent": None,
-            "sub_state": "WAITING_FOR_INTENT",  # Diselaraskan dengan awal orkestrator
+            "sub_state": "WAITING_FOR_INTENT",
             "is_waiting_for_switch_confirmation": False,
             "slots": {},
             "missing_slots": []
