@@ -3,6 +3,8 @@ import logging
 from typing import Dict, Any
 from surat.models import SuratType
 from surat.agents.slot_memory import SlotMemoryManager, is_value_filled
+from .session_manager import AutoSuratSessionManager
+
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +135,6 @@ def process_slot_filling_redis(user_message: str, session_data: dict) -> str:
         if is_value_filled(raw_val):
             cleaned_extracted_data[field_key] = sanitize_extracted_slot(field_key, raw_val)
 
-    from .session_manager import AutoSuratSessionManager
     # Gabungkan ke memori sesi secara deterministik
     updated_slots = SlotMemoryManager.merge_slots(slot_mgr.accumulated_slots, cleaned_extracted_data)
     slot_mgr.accumulated_slots = updated_slots
