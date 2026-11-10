@@ -93,12 +93,12 @@ class SuratDraftingAgent:
 
     DEFAULT_CRITIQUE_THRESHOLD: int = 8
     DEFAULT_MAX_REVISIONS: int = 1
-    DEFAULT_MODEL_NAME: str = "llama-3.3-70b-versatile"
+    DEFAULT_MODEL_NAME: str = "qwen/qwen3.8-27b"
 
     FALLBACK_MODELS = (
-        os.environ.get("DEFAULT_AI_MODEL", "llama-3.3-70b-versatile"),
-        "llama-3.1-70b-versatile",
-        "llama-3.1-8b-instant"
+        "qwen/qwen3.8-27b",
+        "openai/gpt-oss-20b",
+        "openai/gpt-oss-120b",
     )
     DEFAULT_TIMEOUT_SECONDS: float = 30.0
 
