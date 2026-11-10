@@ -108,19 +108,19 @@ class SuratWorkflowOrchestrator:
         if state == "EXPIRED":
             return {
                 "status": "error",
-                "message": "Sesi chat kamu sudah kadaluarsa. Silakan mulai percakapan baru.",
+                "message": "Waktu sesi chat kamu sepertinya sudah habis. Yuk, mulai percakapan baru supaya kita bisa lanjut urus suratnya! Sesi pengajuan surat ini sudah dibatalkan ya. Kabari aku lagi kalau mau bikin permohonan baru!",
                 "thread_id": thread_id
             }
         elif state == "CANCELLED":
             return {
                 "status": "error",
-                "message": "Sesi chat kamu telah dibatalkan. Silakan mulai percakapan baru.",
+                "message": "Waktu sesi chat kamu sepertinya sudah dibatalkan. Yuk, mulai percakapan baru supaya kita bisa lanjut urus suratnya! Sesi pengajuan surat ini sudah dibatalkan ya. Kabari aku lagi kalau mau bikin permohonan baru!",
                 "thread_id": thread_id
             }
         else:
             return {
                 "status": "error",
-                "message": "Sesi chat tidak ditemukan. Silakan mulai percakapan baru.",
+                "message": "Waktu sesi chat kamu sepertinya sudah habis. Yuk, mulai percakapan baru supaya kita bisa lanjut urus suratnya! Sesi pengajuan surat ini sudah dibatalkan ya. Kabari aku lagi kalau mau bikin permohonan baru!",
                 "thread_id": thread_id
             }
             
@@ -176,9 +176,8 @@ class SuratWorkflowOrchestrator:
             first_label = "data yang diperlukan"
 
         welcome_msg = (
-            f"Siap! Saya bantu proses **{surat_obj.nama_surat}** ya.\n\n"
-            f"Untuk memulainya, boleh informasikan **{first_label}** terlebih dahulu?"
-        )
+            f"Siap, aku bantu urus **{surat_obj.nama_surat}** ya! 📝\n\nSebelum mulai, boleh sebutkan **{first_label}**-nya dulu?"
+            )
 
         return {
             "status": "success",
@@ -213,8 +212,7 @@ class SuratWorkflowOrchestrator:
             return {
                 "status": "success",
                 "message": (
-                    f"⚠️ Sesi saat ini sedang memproses **{old_surat.nama_surat}**. "
-                    f"Apakah Anda ingin membatalkan draf tersebut dan beralih membuat **{new_surat.nama_surat}**? "
+                    f"⚠️ Eh sebentar, saat ini kamu lagi ngurus **{old_surat.nama_surat}**, lho. Mau dibatalin terus ganti bikin **{new_surat.nama_surat}**?"
                 )
             }
 
@@ -236,7 +234,7 @@ class SuratWorkflowOrchestrator:
             kode_surat = session_data.get("intent")
             slots = session_data.get("slots", {})
 
-            # (Validasi akademik tetap berjalan seperti biasa...)
+            # Validasi akademik
             try:
                 student_obj = user_obj.student_profile
             except AttributeError:
@@ -252,9 +250,7 @@ class SuratWorkflowOrchestrator:
             session_data["state"] = "PENDING_APPROVAL"
             session_data["sub_state"] = "WAITING_FOR_REVISION"
             session_data["active_surat_request_id"] = surat_req.id
-            # Jalankan drafting secara sinkron (atau tunggu sebentar) agar draf langsung muncul dalam 1 respons chat, 
-            # atau biarkan background worker berjalan dan informasikan user untuk mengetik "cek draf".
-            # Untuk pengalaman instan, kita bisa panggil langsung agen drafting-nya di sini:
+            
             try:
                 agent = SuratDraftingAgent()
                 dynamic_fields = getattr(surat_req.kode_surat, "required_fields_dict", None)
@@ -273,28 +269,45 @@ class SuratWorkflowOrchestrator:
             
             surat_type_name = surat_req.kode_surat.nama_surat if surat_req.kode_surat else "Surat"
             
-            # 📄 KUNCI UTAMA: Tampilkan teks draf AI secara langsung ke chat agar bisa direview!
+            # 📄 Respon Sukses (Bahasa Lebih Humanis)
             return {
                 "status": "success",
                 "surat_request_id": surat_req.id,
                 "message": (
-                    f"🚀 **Permohonan Berhasil Diinisialisasi!** (ID: #{surat_req.id})\n\n"
-                    f"Berikut adalah **Draf AI** untuk **{surat_type_name}**:\n\n"
+                    f"🚀 Yey, permohonan berhasil diinisialisasi! (ID: #{surat_req.id})\n\n"
+                    f"Nih, **Draf AI** untuk **{surat_type_name}** sudah jadi:\n\n"
                     f"> *\"{surat_req.ai_original_draft}\"*\n\n"
                     "--- \n"
-                    "Silakan tinjau draf di atas:\n"
-                    "• Ketik **'Setuju'** atau **'Lanjut'** jika draf sudah pas dan ingin dikirim ke dosen.\n"
-                    "• Atau ketik **catatan revisi** jika ada bagian kalimat yang ingin kamu ubah."
+                    "Coba dibaca dulu ya:\n"
+                    "• Ketik **'Setuju'** atau **'Lanjut'** kalau isinya udah pas dan mau langsung dikirim ke dosen.\n"
+                    "• Atau ketik **catatan revisi** kalau ada kalimat yang mau kamu ubah."
                 )
             }
         else:
-            # (Logika jika user bilang belum...)
+            # (Logika jika user bilang belum / ingin mengulang)
+            kode_surat = session_data.get("intent")
             session_data["slots"] = {}  
             session_data["sub_state"] = "NORMAL_COLLECTION"
             AutoSuratSessionManager.save_session(thread_id, session_data)
+            
+            # Ambil label field pertama dari surat aktif agar bot langsung menagihnya dengan spesifik
+            try:
+                surat_obj = SuratType.objects.get(kode_surat=kode_surat)
+                required_fields = surat_obj.required_payload_fields or []
+                if required_fields:
+                    first_field = required_fields[0]
+                    first_label = first_field.get("label", first_field.get("field", "data utama"))
+                else:
+                    first_label = "data yang diperlukan"
+            except SuratType.DoesNotExist:
+                first_label = "data yang diperlukan"
+
             return {
                 "status": "success",
-                "message": "Baik, mari kita ulangi pengisian data dari awal."
+                "message": (
+                    "Oke, tidak masalah, kita ulang pengisian datanya ya.\n\n"
+                    f"Sebelum mulai lagi, boleh sebutkan **{first_label}**-nya dulu?"
+                )
             }
                         
     @staticmethod

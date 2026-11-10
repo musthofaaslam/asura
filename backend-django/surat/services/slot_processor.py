@@ -56,9 +56,7 @@ def handle_destination_type_selection(user_message: str, session_data: dict, cur
         return "Baik, terpilih **Telegram**. Mohon masukkan nomor **Chat ID Telegram** Anda:"
     else:
         return (
-            "🎉 **Semua data persyaratan surat sudah lengkap 100%!**\n\n"
-            "Terakhir, dokumen PDF hasil jadi nanti mau dikirimkan ke mana setelah disetujui dosen?\n"
-            "👉 Silakan ketik pilihan Anda: **Email** atau **Telegram**"
+            "🎉 Mantap, semua data persyaratannya sudah lengkap!\n\nDokumen PDF jadinya nanti mau dikirim ke mana nih kalau sudah disetujui dosen?\n👉 Ketik pilihanmu: **Email** atau **Telegram**"
         )
 
 
