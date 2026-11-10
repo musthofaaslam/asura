@@ -1,25 +1,16 @@
 from django.core.management.base import BaseCommand
-from django.utils import timezone
-from surat.services.email_service import send_surat_via_gmail_admin
-class Command(BaseCommand):
-    help = "Menguji coba pengiriman email via Brevo HTTP API"
+from surat.services.email_service import send_surat_via_gmail_admin # Sesuaikan dengan lokasi file-mu
 
-    def handle(self, *args, **options):
-        self.stdout.write("Sedang mengirim email uji coba ke Brevo...")
-        
-        # Masukkan email tujuan uji coba (bisa email pribadimu yang lain)
-        recipient = "musthofaaslam29@gmail.com"
-        subject = f"Uji Coba Unik AutoSurat - {timezone.now().strftime('%H:%M:%S')}"
-        # subject = "Uji Coba Sistem AutoSurat Brevo"
-        body = "Halo, ini adalah pesan uji coba dari backend Django AutoSurat menggunakan Brevo HTTP API."
+class Command(BaseCommand):
+    help = 'Test SMTP email via email_service'
+
+    def handle(self, *args, **kwargs):
+        self.stdout.write("Mengirim email uji coba via SMTP Brevo...")
         
         result = send_surat_via_gmail_admin(
-            recipient_email=recipient,
-            subject=subject,
-            body_message=body
+            recipient_email='cygnusnominus@gmail.com',
+            subject='Uji Coba SMTP AutoSurat',
+            body_message='Halo Ahmad, ini adalah pesan uji coba pengiriman email menggunakan konfigurasi SMTP Brevo di Django AutoSurat.'
         )
         
-        if result.get("status") == "SUCCESS":
-            self.stdout.write(self.style.SUCCESS(f"SUKSES! {result.get('message')} (ID: {result.get('email_id')})"))
-        else:
-            self.stdout.write(self.style.ERROR(f"GAGAL: {result.get('message')}"))
+        self.stdout.write(str(result))
