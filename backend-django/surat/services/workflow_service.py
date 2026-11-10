@@ -243,7 +243,12 @@ def _execute_distribution_worker(surat_request_id: int):
         surat_req = SuratRequest.objects.get(pk=surat_request_id)
         logger.info(f"[ASYNC_DIST_START] Memulai distribusi asinkron untuk SuratRequest id={surat_req.id}")
         
-        route_and_distribute_document(surat_req)
+        # 🔑 Tangkap hasil pengiriman dari router
+        distribution_result = route_and_distribute_document(surat_req)
+        
+        # 🔑 Cek apakah hasilnya benar-benar sukses atau error dari service
+        if isinstance(distribution_result, dict) and distribution_result.get("status") == "ERROR":
+            raise Exception(f"Gagal dari API pengiriman: {distribution_result.get('message')}")
         
         surat_req.status = "SENT"
         surat_req.save(update_fields=["status"])
@@ -254,6 +259,7 @@ def _execute_distribution_worker(surat_request_id: int):
             action=f"ASYNC_SENT_VIA_{str(surat_req.chosen_destination).upper()}"
         )
         logger.info(f"[ASYNC_DIST_SUCCESS] Dokumen berhasil dikirim untuk SuratRequest id={surat_req.id}")
+        
     except Exception as exc:
         logger.exception(f"[ASYNC_DIST_ERROR] Gagal mengirim dokumen di latar belakang: {exc}")
         try:

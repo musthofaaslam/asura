@@ -65,7 +65,7 @@ class SuratWorkflowOrchestrator:
                 "status": "success",
                 "state": "CANCELLED",
                 "thread_id": thread_id,
-                "message": "Sesi permohonan surat telah dibatalkan. Ketik pesan baru jika ingin memulai lagi."
+                "message": "Sesi permohonan surat telah dibatalkan. Inisialisasi pesan baru jika ingin memulai lagi."
             }
         
         active_surat_id = session_data.get("active_surat_request_id")
@@ -176,7 +176,7 @@ class SuratWorkflowOrchestrator:
             first_label = "data yang diperlukan"
 
         welcome_msg = (
-            f"Siap! Saya bantu proses **{surat_obj.nama_surat}** ({detected_kode_surat}) ya.\n\n"
+            f"Siap! Saya bantu proses **{surat_obj.nama_surat}** ya.\n\n"
             f"Untuk memulainya, boleh informasikan **{first_label}** terlebih dahulu?"
         )
 
