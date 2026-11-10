@@ -37,8 +37,8 @@ def render_and_upload_pdf(template_path, context_data):
         secure_url = upload_result.get("secure_url")
         
         # SISIPKAN INI: Mengubah URL agar langsung mendownload file saat diklik
-        if secure_url and "/upload/" in secure_url:
-            secure_url = secure_url.replace("/upload/", "/upload/fl_attachment/")
+        # if secure_url and "/upload/" in secure_url:
+        #     secure_url = secure_url.replace("/upload/", "/upload/fl_attachment/")
             
     except Exception as e:
         raise RuntimeError(f"Gagal mengunggah PDF ke Cloudinary: {str(e)}")
