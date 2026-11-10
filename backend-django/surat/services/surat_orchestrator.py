@@ -462,42 +462,51 @@ class SuratWorkflowOrchestrator:
             daemon=True
         )
         thread.start()
+
     @staticmethod
-    @staticmethod
-    def _execute_drafting_worker(surat_request_id: int, user_prompt_context: str, kode_surat: str, dynamic_fields_dict: Optional[dict], thread_id: Optional[str] = None):
+    def _execute_redrafting_worker(surat_request_id: int, revision_notes: str, thread_id: Optional[str] = None):
+        """
+        Background worker untuk merombak draf surat berdasarkan catatan revisi dari pengguna.
+        """
         close_old_connections()
         try:
+            # 1. Ambil data surat request dari database
+            surat_req = SuratRequest.objects.get(id=surat_request_id)
+            dynamic_fields = getattr(surat_req.kode_surat, "required_fields_dict", None)
+            
+            # 2. Gabungkan konteks awal dengan catatan revisi terbaru
+            original_context = surat_req.user_prompt_context or ""
+            updated_context = f"{original_context}\n\n[CATATAN REVISI DARI PENGGUNA]: {revision_notes}"
+
+            # 3. Panggil agen AI untuk generate ulang draf
             agent = SuratDraftingAgent()
             result = agent.draft_letter(
-                user_prompt_context=user_prompt_context,
-                kode_surat=kode_surat,
-                dynamic_fields_dict=dynamic_fields_dict
+                user_prompt_context=updated_context,
+                kode_surat=surat_req.kode_surat.kode_surat,
+                dynamic_fields_dict=dynamic_fields
             )
             
-            surat_req = SuratRequest.objects.get(id=surat_request_id)
+            # 4. Perbarui data surat dengan hasil draf rombakan AI yang baru
             surat_req.ai_original_draft = getattr(result, "ai_original_draft", "")
             
             evaluation_obj = getattr(result, "evaluation", None)
             if evaluation_obj:
                 surat_req.self_critique_score = getattr(evaluation_obj, "self_critique_score", 0)
                 surat_req.revision_notes = getattr(evaluation_obj, "revision_notes", [])
-                
-            if surat_req.self_critique_score >= 8:
-                surat_req.status = "PENDING_APPROVAL"
-            else:
-                surat_req.status = "REVISION_REQUIRED"
-                surat_req.revision_notes = getattr(evaluation_obj, "revision_notes", ["Perlu penyesuaian data."])
-                
+            
+            # Kembalikan status ke PENDING_APPROVAL agar user bisa mereview kembali hasilnya
+            surat_req.status = "PENDING_APPROVAL"
             surat_req.save()
 
-            # 🔑 Simpan ID surat aktif ke dalam sesi Redis jika thread_id tersedia
+            # 5. Jika thread_id tersedia, pastikan state Redis tetap terkunci di mode review
             if thread_id:
                 session_data = AutoSuratSessionManager.get_session(thread_id)
                 session_data["active_surat_request_id"] = surat_req.id
                 session_data["state"] = "PENDING_APPROVAL"
+                session_data["sub_state"] = "WAITING_FOR_REVISION"
                 AutoSuratSessionManager.save_session(thread_id, session_data)
 
-            logger.info(f"[Worker] Drafting selesai untuk Surat #{surat_request_id}. Status: {surat_req.status}")
+            logger.info(f"[Worker] Redrafting selesai untuk Surat #{surat_request_id}. Draf baru telah diperbarui.")
         except Exception as e:
-            logger.error(f"[Worker Error] Gagal drafting Surat #{surat_request_id}: {str(e)}\n{traceback.format_exc()}")
+            logger.error(f"[Worker Error] Gagal redrafting Surat #{surat_request_id}: {str(e)}\n{traceback.format_exc()}")
             SuratRequest.objects.filter(id=surat_request_id).update(status="FAILED")
