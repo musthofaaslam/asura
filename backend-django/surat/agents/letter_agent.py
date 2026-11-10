@@ -98,6 +98,7 @@ class SuratDraftingAgent:
     FALLBACK_MODELS = (
         os.environ.get("DEFAULT_AI_MODEL", "llama-3.3-70b-versatile"),
         "llama-3.1-70b-versatile",
+        "llama-3.1-8b-instant"
     )
     DEFAULT_TIMEOUT_SECONDS: float = 30.0
 
