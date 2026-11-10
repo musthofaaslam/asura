@@ -67,7 +67,14 @@ class SuratWorkflowOrchestrator:
                 "thread_id": thread_id,
                 "message": "Sesi permohonan surat telah dibatalkan. Ketik pesan baru jika ingin memulai lagi."
             }
-            
+        
+        active_surat_id = session_data.get("active_surat_request_id")
+        if active_surat_id or state in ["PENDING_APPROVAL", "REVISION_REQUIRED"] or sub_state == "WAITING_FOR_REVISION":
+            response_result = cls._handle_chat_review_or_redraft(thread_id, user_message, user_obj, session_data)
+            if isinstance(response_result, dict):
+                response_result["thread_id"] = thread_id
+            return response_result
+        
         # 4. ROUTING BERDASARKAN SUB-STATE & MAIN STATE
         response_result = {}
 
@@ -82,10 +89,6 @@ class SuratWorkflowOrchestrator:
         elif sub_state == "WAITING_SLOT_CONFIRMATION":
             # Tahap Konfirmasi Data Lengkap (Ya/Belum)
             response_result = cls._handle_slot_confirmation_response(thread_id, user_message, user_obj, session_data)
-
-        elif sub_state == "WAITING_FOR_REVISION" or state in ["PENDING_APPROVAL", "REVISION_REQUIRED"]:
-            # Tahap Review Draf atau Pemberian Catatan Revisi
-            response_result = cls._handle_chat_review_or_redraft(thread_id, user_message, user_obj, session_data)
 
         elif state == "IN_REVIEW":
             # Tahap Persetujuan Berjenjang oleh Dosen/Pejabat
@@ -246,9 +249,9 @@ class SuratWorkflowOrchestrator:
             surat_req = cls._initialize_surat_request(session_data, user_obj)
             
             # Simpan ID surat aktif ke session
-            session_data["active_surat_request_id"] = surat_req.id
             session_data["state"] = "PENDING_APPROVAL"
-
+            session_data["sub_state"] = "WAITING_FOR_REVISION"
+            session_data["active_surat_request_id"] = surat_req.id
             # Jalankan drafting secara sinkron (atau tunggu sebentar) agar draf langsung muncul dalam 1 respons chat, 
             # atau biarkan background worker berjalan dan informasikan user untuk mengetik "cek draf".
             # Untuk pengalaman instan, kita bisa panggil langsung agen drafting-nya di sini:
