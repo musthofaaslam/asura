@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 from surat.services.email_service import send_surat_via_gmail_admin
-
 class Command(BaseCommand):
     help = "Menguji coba pengiriman email via Brevo HTTP API"
 
@@ -9,7 +9,8 @@ class Command(BaseCommand):
         
         # Masukkan email tujuan uji coba (bisa email pribadimu yang lain)
         recipient = "musthofaaslam29@gmail.com"
-        subject = "Uji Coba Sistem AutoSurat Brevo"
+        subject = f"Uji Coba Unik AutoSurat - {timezone.now().strftime('%H:%M:%S')}"
+        # subject = "Uji Coba Sistem AutoSurat Brevo"
         body = "Halo, ini adalah pesan uji coba dari backend Django AutoSurat menggunakan Brevo HTTP API."
         
         result = send_surat_via_gmail_admin(
