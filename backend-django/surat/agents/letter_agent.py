@@ -101,8 +101,7 @@ class SuratDraftingAgent:
     # Gunakan model stabil yang pasti didukung sebagai cadangan di bawahnya
     FALLBACK_MODELS = (
         os.environ.get("GEMINI_MODEL_NAME", "gemini-3.1-flash-lite"),
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
+        "gemini-3.8-flash", # Menggantikan versi lama yang sudah mati
     )
     DEFAULT_TIMEOUT_SECONDS: float = 30.0
 
