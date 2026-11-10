@@ -429,8 +429,11 @@ class SuratDraftingAgent:
         except Exception as exc:
             status_code = getattr(exc, "status_code", None) or 500
             exc_text = str(exc).lower()
+            # Tambahkan deteksi 404 / model not found agar otomatis mencoba fallback
             is_retriable = (
-                status_code in (429, 503)
+                status_code in (404, 429, 503)
+                or "404" in exc_text
+                or "not_found" in exc_text
                 or "429" in exc_text
                 or "rate limit" in exc_text
                 or "503" in exc_text
