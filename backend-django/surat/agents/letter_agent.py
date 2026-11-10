@@ -96,12 +96,13 @@ class SuratDraftingAgent:
 
     DEFAULT_CRITIQUE_THRESHOLD: int = 8
     DEFAULT_MAX_REVISIONS: int = 1
-    DEFAULT_MODEL_NAME: str = "gemini-2.5-flash"
+    DEFAULT_MODEL_NAME: str = "gemini-3.1-flash-lite"
 
-    FALLBACK_MODELS: tuple = (
+    # Gunakan model stabil yang pasti didukung sebagai cadangan di bawahnya
+    FALLBACK_MODELS = (
+        os.environ.get("GEMINI_MODEL_NAME", "gemini-3.1-flash-lite"),
         "gemini-2.5-flash",
         "gemini-2.0-flash",
-        "gemini-1.5-flash",
     )
     DEFAULT_TIMEOUT_SECONDS: float = 30.0
 
