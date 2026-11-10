@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 def send_surat_via_gmail_admin(recipient_email: str, subject: str, body_message: str, pdf_path: str = None):
     """
     Mengirimkan email resmi berisi dokumen surat menggunakan Brevo HTTP API (Port 443).
-    Aman dari kendala jaringan di server cloud (Render).
+    Mendukung lampiran file baik dari path lokal maupun URL cloud storage (Cloudinary).
     """
     api_key = getattr(settings, "BREVO_API_KEY", os.environ.get("BREVO_API_KEY", ""))
     
@@ -38,20 +38,34 @@ def send_surat_via_gmail_admin(recipient_email: str, subject: str, body_message:
         "textContent": body_message
     }
 
-    # Jika ada lampiran file PDF
-    if pdf_path and os.path.exists(pdf_path):
+    # Jika ada lampiran file PDF (mendukung URL Cloudinary maupun file lokal)
+    if pdf_path:
         try:
-            with open(pdf_path, "rb") as f:
-                pdf_bytes = f.read()
+            pdf_bytes = None
+            if pdf_path.startswith("http://") or pdf_path.startswith("https://"):
+                # Jika berupa URL publik (seperti Cloudinary)
+                resp = requests.get(pdf_path, timeout=15)
+                if resp.status_code == 200:
+                    pdf_bytes = resp.content
+                else:
+                    logger.error(f"Gagal mendownload PDF dari URL: {pdf_path} (Status: {resp.status_code})")
+            elif os.path.exists(pdf_path):
+                # Jika berupa file lokal server
+                with open(pdf_path, "rb") as f:
+                    pdf_bytes = f.read()
+
+            if pdf_bytes:
                 pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
-                
-            filename = os.path.basename(pdf_path)
-            payload["attachment"] = [
-                {
-                    "content": pdf_base64,
-                    "name": filename
-                }
-            ]
+                filename = pdf_path.split("/")[-1].split("?")[0] or "surat_resmi.pdf"
+                if not filename.endswith(".pdf"):
+                    filename += ".pdf"
+
+                payload["attachment"] = [
+                    {
+                        "content": pdf_base64,
+                        "name": filename
+                    }
+                ]
         except Exception as attach_err:
             logger.error(f"Gagal memproses lampiran PDF untuk Brevo: {attach_err}")
 
