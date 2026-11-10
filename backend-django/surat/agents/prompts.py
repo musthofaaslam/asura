@@ -50,6 +50,10 @@ KONTEKS PERMOHONAN PENGGUNA:
 {user_prompt_context}
 \"\"\"
 
+INSTRUKSI PENTING PENULISAN DRAF:
+- Jika "DATA PEMOHON TERVERIFIKASI" di atas tersedia (seperti Nama Mahasiswa, NIM, Program Studi, Fakultas), **KAMU WAJIB MEMASUKKANNYA SECARA LANGSUNG** ke dalam tubuh naskah surat (`ai_original_draft`).
+- **DILARANG KERAS** menggunakan placeholder atau tanda kurung siku seperti `[Nama Universitas]`, `[Nama Mahasiswa]`, atau `[NIM]` jika data aslinya sudah tertera pada data pemohon di atas!
+- Pastikan seluruh nilai yang diekstrak ke dalam `extracted_payload` tercantum secara konsisten dan akurat di dalam naskah, lalu lakukan evaluasi objektif pada `evaluation`.
 Pastikan seluruh nilai yang diekstrak ke dalam `extracted_payload` tercantum secara konsisten dan akurat di dalam naskah `ai_original_draft`, lalu lakukan evaluasi objektif pada `evaluation`."""
 
 
