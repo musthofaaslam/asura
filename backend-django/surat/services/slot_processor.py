@@ -28,7 +28,14 @@ def handle_switch_confirmation_redis(user_message: str, thread_id: str, session_
             thread_obj.title = f"Permohonan {new_surat_obj.nama_surat}"
             thread_obj.save(update_fields=['document_type', 'title', 'updated_at'])
             
-        return f"Draf sebelumnya ({old_code}) telah dibatalkan. Berhasil beralih ke **{new_surat_obj.nama_surat}**. Silakan masukkan data yang diperlukan!"
+        required_fields = new_surat_obj.required_payload_fields or []
+        if required_fields:
+            first_field = required_fields[0]
+            first_label = first_field.get("label", first_field.get("field", "data utama"))
+        else:
+            first_label = "data yang diperlukan"
+
+        return f"Draf sebelumnya ({old_code}) telah dibatalkan. Berhasil beralih ke **{new_surat_obj.nama_surat}**. Silakan masukkan {first_label} yang diperlukan!"
     
     else:
         session_data["pending_intent"] = None

@@ -19,3 +19,4 @@ redis>=5.0.0
 django-redis>=5.4.0
 qrcode>=8.0.0
 resend>=0.7.0
+groq
