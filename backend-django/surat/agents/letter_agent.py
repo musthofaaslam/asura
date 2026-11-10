@@ -96,11 +96,12 @@ class SuratDraftingAgent:
 
     DEFAULT_CRITIQUE_THRESHOLD: int = 8
     DEFAULT_MAX_REVISIONS: int = 1
-    DEFAULT_MODEL_NAME: str = "gemini-3.1-flash-lite"
+    DEFAULT_MODEL_NAME: str = "gemini-2.5-flash"
+
     FALLBACK_MODELS: tuple = (
-        "gemini-3.1-flash-lite",
-        "gemini-3.8-flash",
-        "gemini-flash-lite-latest",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
     )
     DEFAULT_TIMEOUT_SECONDS: float = 30.0
 

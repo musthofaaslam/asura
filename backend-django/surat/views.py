@@ -970,10 +970,10 @@ class AutoSuratChatAPIView(APIView):
             data = raw_data
         else:
             data = {}
-        
-        # 1. Ambil payload dari frontend
-        thread_id = request.data.get("thread_id")  # Bisa None/kosong untuk New Chat
-        user_message = request.data.get("message", "").strip()
+
+        # 1. Ambil payload dari variabel 'data' yang sudah aman (bukan request.data lagi)
+        thread_id = data.get("thread_id")  # Bisa None/kosong untuk New Chat
+        user_message = data.get("message", "").strip()
 
         if not user_message:
             return Response(
