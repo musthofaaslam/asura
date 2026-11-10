@@ -84,7 +84,7 @@ if not db_url and os.environ.get('POSTGRES_DB'):
     db_user = os.environ.get('POSTGRES_USER', 'postgres')
     db_password = os.environ.get('POSTGRES_PASSWORD', 'postgres_password_lokal')
     db_host = os.environ.get('POSTGRES_HOST', 'postgres')
-    db_port = os.environ.get('POSTGRES_PORT', '5432')
+    db_port = os.environ.get('POSTGRES_PORT', '6543')
     db_name = os.environ.get('POSTGRES_DB', 'autosurat_db')
     db_url = f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}"
 
