@@ -27,7 +27,7 @@ def render_and_upload_pdf(template_path, context_data):
     try:
         upload_result = cloudinary.uploader.upload(
             pdf_temp_path,
-            resource_type="image",
+            resource_type="auto",          # Ubah dari "image" ke "raw" atau "auto" agar file PDF diperlakukan sebagai dokumen umum
             type="upload",
             access_mode="public",
             folder="autosurat_output",
