@@ -44,12 +44,43 @@ def send_surat_via_gmail_admin(recipient_email: str, subject: str, body_message:
             filename = "surat_resmi.pdf"
             
             if pdf_path.startswith("http://") or pdf_path.startswith("https://"):
-                resp = requests.get(pdf_path, timeout=15)
-                if resp.status_code == 200:
-                    pdf_bytes = resp.content
-                    filename = pdf_path.split("/")[-1].split("?")[0] or "surat_resmi.pdf"
-                else:
-                    logger.error(f"Gagal mendownload PDF dari URL: {pdf_path} (Status: {resp.status_code})")
+                # Opsi menggunakan Cloudinary Admin/Download SDK atau fallback requests dengan signed URL
+                # Jika URL dari Cloudinary, kita bisa ambil public_id-nya atau gunakan cloudinary.utils.private_download_url
+                try:
+                    import cloudinary.utils
+                    # Ekstrak public_id atau gunakan URL langsung dengan tanda tangan SDK jika privat
+                    # Atau cara paling aman: jika file ada di local temp, gunakan path lokalnya.
+                    # Tapi jika terpaksa via URL Cloudinary, kita bisa generate signed download URL:
+                    parsed_url = pdf_path.split("/upload/")
+                    if len(parsed_url) > 1:
+                        # Hilangkan versi (misal v179435...) jika ada
+                        sub_path = parsed_url[1]
+                        if sub_path.startswith("v"):
+                            sub_path = "/".join(sub_path.split("/")[1:])
+                        public_id_with_ext = sub_path.split("?")[0]
+                        public_id = public_id_with_ext.rsplit(".", 1)[0]
+                        
+                        # Generate signed download URL via Cloudinary SDK
+                        signed_download_url = cloudinary.utils.private_download_url(
+                            public_id, 
+                            resource_type="raw", # Sesuaikan dengan saat upload
+                            format="pdf"
+                        )
+                        resp = requests.get(signed_download_url, timeout=15)
+                    else:
+                        resp = requests.get(pdf_path, timeout=15)
+                        
+                    if resp.status_code == 200:
+                        pdf_bytes = resp.content
+                        filename = pdf_path.split("/")[-1].split("?")[0] or "surat_resmi.pdf"
+                    else:
+                        logger.error(f"Gagal mendownload PDF via signed URL Cloudinary: (Status: {resp.status_code})")
+                except Exception as sdk_err:
+                    logger.error(f"Gagal memproses Cloudinary SDK download: {sdk_err}")
+                    # Fallback ke requests biasa
+                    resp = requests.get(pdf_path, timeout=15)
+                    if resp.status_code == 200:
+                        pdf_bytes = resp.content
             elif os.path.exists(pdf_path):
                 with open(pdf_path, "rb") as f:
                     pdf_bytes = f.read()
@@ -68,7 +99,6 @@ def send_surat_via_gmail_admin(recipient_email: str, subject: str, body_message:
                 ]
         except Exception as attach_err:
             logger.error(f"Gagal memproses lampiran PDF untuk Brevo API: {attach_err}")
-
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=20)
         res_data = response.json()

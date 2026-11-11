@@ -252,11 +252,28 @@ class SuratWorkflowOrchestrator:
             session_data["active_surat_request_id"] = surat_req.id
             
             try:
+                # Ambil profil mahasiswa untuk dikirim ke agen AI
+                student_metadata = {}
+                try:
+                    student_obj = user_obj.student_profile
+                    student_metadata = {
+                        "nim": student_obj.nim,
+                        "nama": getattr(user_obj, "nama", "") or getattr(student_obj.user, "nama", ""),
+                        "prodi": student_obj.prodi.nama_prodi if student_obj.prodi else "",
+                        "fakultas": student_obj.fakultas.nama_fakultas if student_obj.fakultas else "",
+                        "semester_aktif": student_obj.semester_aktif,
+                    }
+                except AttributeError:
+                    pass
+
                 agent = SuratDraftingAgent()
                 dynamic_fields = getattr(surat_req.kode_surat, "required_fields_dict", None)
+                
+                # 💡 SERTAKAN STUDENT_METADATA DI SINI
                 result = agent.draft_letter(
                     user_prompt_context=surat_req.user_prompt_context,
                     kode_surat=surat_req.kode_surat.kode_surat,
+                    student_metadata=student_metadata, 
                     dynamic_fields_dict=dynamic_fields
                 )
                 surat_req.ai_original_draft = getattr(result, "ai_original_draft", "")
@@ -264,7 +281,7 @@ class SuratWorkflowOrchestrator:
                 surat_req.save()
             except Exception as e:
                 logger.error(f"Gagal generate draf instan: {e}")
-
+                
             AutoSuratSessionManager.save_session(thread_id, session_data)
             
             surat_type_name = surat_req.kode_surat.nama_surat if surat_req.kode_surat else "Surat"
