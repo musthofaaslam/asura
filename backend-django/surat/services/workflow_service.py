@@ -12,6 +12,9 @@ from .email_service import send_surat_via_gmail_admin
 from .telegram_service import send_surat_via_telegram
 import threading
 from django.db import close_old_connections
+import tempfile
+from django.template.loader import render_to_string
+from weasyprint import HTML
 
 logger = getLogger(__name__)
 
@@ -165,11 +168,24 @@ def process_approval_action(approval_id, lecturer, action, catatan=""):
                         "approvals": surat_approvals_list,
                         "tanggal_terbit": timezone.now(),
                     }
-                    pdf_url = render_and_upload_pdf(surat_req.kode_surat.template_path, context_data)
-                    surat_req.file_pdf_url = pdf_url
-                    surat_req.status = 'SENT'  # Update status akhir menjadi terkirim/selesai
-                    surat_req.save()
                     
+                    # 💡 MODIFIKASI DI SINI: Kita render file lokal secara manual sebentar 
+                    # agar path lokalnya bisa langsung dipakai untuk lampiran email, 
+                    # lalu tetap di-upload ke Cloudinary untuk arsip database.
+                    
+                    html_string = render_to_string(surat_req.kode_surat.template_path, context_data)
+                    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as output_pdf:
+                        HTML(string=html_string).write_pdf(output_pdf.name)
+                    
+                        local_pdf_path = output_pdf.name  # <-- Ini path file lokal yang 100% aman!
+
+                    # Upload ke Cloudinary untuk URL database
+                    pdf_url = render_and_upload_pdf(surat_req.kode_surat.template_path, context_data)
+                    
+                    surat_req.file_pdf_url = pdf_url
+                    surat_req.status = 'SENT'  
+                    surat_req.save()
+
                 # 4. Catat Audit Log Final
                 SuratAuditLog.objects.create(
                     surat_request=surat_req,
