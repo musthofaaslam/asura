@@ -1,5 +1,6 @@
 # apps/surat/services/workflow_service.py
 from logging import getLogger
+import os
 from django.utils import timezone
 from django.db import transaction
 from .auto_handlers import handle_auto_approval_surat
@@ -193,13 +194,14 @@ def process_approval_action(approval_id, lecturer, action, catatan=""):
                     action="FINAL_APPROVED_AND_ISSUED"
                 )
 
-                dist_thread = threading.Thread(
-                    target=_execute_distribution_worker,
-                    args=(surat_req.id,),
-                    name=f"async-dist-{surat_req.id}",
-                    daemon=True
-                )
-                dist_thread.start()
+                # dist_thread = threading.Thread(
+                #     target=_execute_distribution_worker,
+                #     args=(surat_req.id, local_pdf_path),
+                #     name=f"async-dist-{surat_req.id}",
+                #     daemon=True
+                # )
+                # dist_thread.start()
+                _execute_distribution_worker(surat_req.id, local_pdf_path)
 
             except Exception as e:
                 return {"error": f"Gagal menerbitkan dokumen resmi: {str(e)}"}, 500
@@ -212,13 +214,19 @@ def process_approval_action(approval_id, lecturer, action, catatan=""):
 
     return {"error": "Aksi tidak valid."}, 400
 
-
-def route_and_distribute_document(surat_request):
+def route_and_distribute_document(surat_request, local_pdf_path: str = None):
     """
     Router utama agen untuk menentukan apakah kirim ke Email atau Telegram
     menggunakan kolom database yang konsisten (`chosen_destination` dan `target_destination_address`).
     """
-    if not surat_request.file_pdf_url:
+    # Pastikan file PDF target valid (prioritaskan path lokal yang benar-benar ada)
+    pdf_target = None
+    if local_pdf_path and os.path.exists(local_pdf_path):
+        pdf_target = local_pdf_path
+    else:
+        pdf_target = surat_request.file_pdf_url
+
+    if not pdf_target:
         raise ValueError("File PDF belum tersedia untuk didistribusikan.")
 
     destination_type = surat_request.chosen_destination  # 'email' atau 'telegram'
@@ -236,7 +244,7 @@ def route_and_distribute_document(surat_request):
             recipient_email=target_address,
             subject=subject,
             body_message=body,
-            pdf_path=surat_request.file_pdf_url  # Pastikan service menerima URL Cloudinary atau file lokal
+            pdf_path=pdf_target  
         )
         
     elif destination_type == 'telegram':
@@ -244,12 +252,11 @@ def route_and_distribute_document(surat_request):
         return send_surat_via_telegram(
             chat_id=target_address,
             caption=caption,
-            pdf_path=surat_request.file_pdf_url
+            pdf_path=pdf_target
         )
     else:
-        logger.warning(f"Destinasi pengiriman tidak dikenal atau kosong untuk SuratRequest id={surat_request.id}")
-        
-def _execute_distribution_worker(surat_request_id: int):
+        logger.warning(f"Destinasi pengiriman tidak dikenal atau kosong untuk SuratRequest id={surat_request.id}")        
+def _execute_distribution_worker(surat_request_id: int, local_pdf_path: str = None):
     """
     Worker asinkron untuk menjalankan route_and_distribute_document di latar belakang
     agar tidak memblokir HTTP response aksi approval dosen.
@@ -260,7 +267,7 @@ def _execute_distribution_worker(surat_request_id: int):
         logger.info(f"[ASYNC_DIST_START] Memulai distribusi asinkron untuk SuratRequest id={surat_req.id}")
         
         # 🔑 Tangkap hasil pengiriman dari router
-        distribution_result = route_and_distribute_document(surat_req)
+        distribution_result = route_and_distribute_document(surat_req, local_pdf_path=local_pdf_path)
         
         # 🔑 Cek apakah hasilnya benar-benar sukses atau error dari service
         if isinstance(distribution_result, dict) and distribution_result.get("status") == "ERROR":
